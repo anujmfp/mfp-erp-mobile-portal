@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MFP ERP | Mobile Daily Portal</title>
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Supabase JS Client SDK via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Mozilla PDF.js Library via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+</head>
+<body>
+
+  <!-- Phone Device Frame Simulator -->
+  <div class="phone-simulator">
+    <div class="phone-notch"></div>
+    
+    <!-- Phone Screen viewport -->
+    <div class="phone-screen">
+      
+      <!-- Top Brand Header -->
+      <header class="app-header">
+        <div class="app-brand">
+          <i class="fa-solid fa-leaf"></i>
+          <h1>MFP ERP</h1>
+        </div>
+        <div class="db-status-badge offline" id="db-status-indicator" onclick="app.openSettingsModal()" title="Database Connection Status. Click to edit settings.">
+          <i class="fa-solid fa-cloud-slash"></i> Offline Mode
+        </div>
+      </header>
+
+      <!-- ==========================================
+           1. VIEW: ORDER BOOK & PURCHASE REQUEST
+           ========================================== -->
+      <section id="view-order" class="app-view active">
+        <div class="ui-card">
+          <div class="card-title">
+            <span><i class="fa-solid fa-cart-shopping"></i> Purchase Order Book</span>
+          </div>
+          
+          <form id="order-form" onsubmit="app.handleOrderSubmit(event)">
+            <div class="form-group">
+              <label>Raw Material / Ingredient *</label>
+              <select class="form-control" id="order-material" required>
+                <!-- Loaded dynamically -->
+              </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Quantity *</label>
+                <input type="number" step="0.001" class="form-control" id="order-qty" placeholder="e.g. 50" required>
+              </div>
+              <div class="form-group">
+                <label>Target Price (Rs.)</label>
+                <input type="number" step="0.01" class="form-control" id="order-price" placeholder="e.g. 180">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Vendor / Supplier Name</label>
+              <input type="text" class="form-control" id="order-vendor" placeholder="e.g. Agro Supplies Ltd">
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="padding: 0.65rem;">
+              <i class="fa-solid fa-paper-plane"></i> Submit Order Request
+            </button>
+          </form>
+        </div>
+
+        <!-- WhatsApp Compile Box -->
+        <div class="whatsapp-widget hidden" id="order-wa-widget">
+          <h4><i class="fa-brands fa-whatsapp"></i> WhatsApp Order Request compiled</h4>
+          <textarea class="whatsapp-textarea" id="order-wa-text" readonly></textarea>
+          <div class="whatsapp-actions">
+            <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('order-wa-text')">
+              <i class="fa-solid fa-copy"></i> Copy Text
+            </button>
+            <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('order-wa-text')">
+              <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+            </button>
+          </div>
+        </div>
+
+        <!-- Recent outstanding orders list -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Outstanding Pending Orders</span>
+          </div>
+          <div class="stock-cover-list" id="order-list-container" style="max-height: 200px; overflow-y:auto;">
+            <div class="td-muted italic text-center" style="padding:1rem;">No pending purchase orders.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           2. VIEW: INWARD PURCHASE BILL COMPARATIVE
+           ========================================== -->
+      <section id="view-inward" class="app-view">
+        <div class="ui-card">
+          <div class="card-title">
+            <span><i class="fa-solid fa-circle-down"></i> Log Material Inward</span>
+          </div>
+          
+          <div class="mobile-dropzone" id="inward-dropzone">
+            <div class="dropzone-icon"><i class="fa-solid fa-file-pdf"></i></div>
+            <div class="dropzone-text">
+              <h3>Upload Inward Purchase PDF Bill</h3>
+              <p>Extracts items, weights, and compares with pending orders.</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('inward-file-input').click()" style="margin-top:0.5rem; padding: 0.35rem 0.65rem;">
+              Browse Bill
+            </button>
+            <input type="file" id="inward-file-input" class="hidden" accept=".pdf" onchange="app.handleInwardUpload(this.files[0])">
+          </div>
+
+          <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
+
+          <form id="inward-manual-form" onsubmit="app.handleManualInwardSubmit(event)">
+            <div class="form-group">
+              <label>Bill / Invoice Reference *</label>
+              <input type="text" class="form-control" id="inward-invoice" placeholder="e.g. INV-9034" required>
+            </div>
+
+            <div class="form-group">
+              <label>Select Associated Order *</label>
+              <select class="form-control" id="inward-linked-order" onchange="app.autoFillInwardFromOrder()" required>
+                <!-- Loaded dynamically -->
+              </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Received Qty *</label>
+                <input type="number" step="0.001" class="form-control" id="inward-qty" placeholder="Actual received weight" required>
+              </div>
+              <div class="form-group">
+                <label>Billed Rate (Rs.) *</label>
+                <input type="number" step="0.01" class="form-control" id="inward-rate" placeholder="Billed unit price" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Supplier / Vendor *</label>
+              <input type="text" class="form-control" id="inward-supplier" placeholder="e.g. Grower Fertilizer Corp" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="padding:0.65rem;">
+              <i class="fa-solid fa-check-double"></i> Commit Inward & Verify
+            </button>
+          </form>
+        </div>
+
+        <!-- WhatsApp Variance Warning Widget -->
+        <div class="whatsapp-widget hidden" id="inward-wa-widget">
+          <h4 style="color: var(--color-danger);"><i class="fa-brands fa-whatsapp"></i> WhatsApp Variance Alert Compiled</h4>
+          <textarea class="whatsapp-textarea" id="inward-wa-text" readonly style="border-color: rgba(239, 68, 68, 0.2);"></textarea>
+          <div class="whatsapp-actions">
+            <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('inward-wa-text')">
+              <i class="fa-solid fa-copy"></i> Copy Text
+            </button>
+            <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('inward-wa-text')">
+              <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           3. VIEW: DAILY PROCESSING / MANUFACTURING
+           ========================================== -->
+      <section id="view-production" class="app-view">
+        <div class="ui-card">
+          <div class="card-title">
+            <span><i class="fa-solid fa-gears"></i> Daily Production Batch</span>
+          </div>
+
+          <!-- Sub-tabs for Product Group Categories -->
+          <div class="sub-tabs-bar">
+            <div class="sub-tab-btn active" data-cat="Bottles" onclick="app.switchProductionCategory('Bottles', this)">Bottles</div>
+            <div class="sub-tab-btn" data-cat="Pouches" onclick="app.switchProductionCategory('Pouches', this)">Pouches</div>
+            <div class="sub-tab-btn" data-cat="Sachets" onclick="app.switchProductionCategory('Sachets', this)">Sachet</div>
+            <div class="sub-tab-btn" data-cat="Horeca" onclick="app.switchProductionCategory('Horeca', this)">Horeca</div>
+          </div>
+
+          <form id="production-form" onsubmit="app.handleProductionSubmit(event)">
+            <div class="form-group">
+              <label>Select Product SKU *</label>
+              <select class="form-control" id="production-product" onchange="app.updateProductionRecipeChecklist()" required>
+                <!-- Loaded dynamically based on sub-tab -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Quantity Manufactured (pcs) *</label>
+              <input type="number" step="1" min="1" class="form-control" id="production-qty" placeholder="Enter number of pieces" oninput="app.updateProductionRecipeChecklist()" required>
+            </div>
+
+            <!-- Material Forecast Cover Checklist -->
+            <div style="background-color:rgba(0,0,0,0.2); padding:0.65rem; border-radius:6px; margin-bottom:1rem; font-size:0.75rem;">
+              <div style="font-weight:bold; color:var(--text-muted); margin-bottom:0.35rem; text-transform:uppercase; font-size:0.65rem;">Raw Materials Cover Cover Checklist</div>
+              <div id="production-checklist" style="display:flex; flex-direction:column; gap:0.25rem;">
+                <span class="td-muted italic">Choose a product to evaluate raw material stock cover.</span>
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="padding:0.65rem;">
+              <i class="fa-solid fa-gears"></i> Record Daily Batch
+            </button>
+          </form>
+        </div>
+
+        <!-- Dynamic Stock Balance status card -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Raw Materials Stock Cover</span>
+          </div>
+          <div class="stock-cover-list" id="production-stock-container" style="max-height: 180px; overflow-y:auto;">
+            <!-- Loaded dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           4. VIEW: OUTWARD Dispatch sales
+           ========================================== -->
+      <section id="view-outward" class="app-view">
+        <div class="ui-card">
+          <div class="card-title">
+            <span><i class="fa-solid fa-circle-up"></i> Sales Invoice Dispatch</span>
+          </div>
+
+          <div class="mobile-dropzone" id="outward-dropzone">
+            <div class="dropzone-icon"><i class="fa-solid fa-file-invoice"></i></div>
+            <div class="dropzone-text">
+              <h3>Upload Sales Invoice PDF</h3>
+              <p>Automatically extracts dispatches and updates Finished Goods warehouse.</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('outward-file-input').click()" style="margin-top:0.5rem; padding: 0.35rem 0.65rem;">
+              Browse Invoice
+            </button>
+            <input type="file" id="outward-file-input" class="hidden" accept=".pdf" onchange="app.handleOutwardUpload(this.files[0])">
+          </div>
+
+          <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
+
+          <form id="outward-manual-form" onsubmit="app.handleManualOutwardSubmit(event)">
+            <div class="form-group">
+              <label>Sales Invoice Number *</label>
+              <input type="text" class="form-control" id="outward-invoice" placeholder="e.g. IN-1002" required>
+            </div>
+
+            <div class="form-group">
+              <label>Select Product *</label>
+              <select class="form-control" id="outward-product" required>
+                <!-- Loaded dynamically -->
+              </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Dispatch Quantity (pcs) *</label>
+                <input type="number" min="1" class="form-control" id="outward-qty" placeholder="Pieces shipped" required>
+              </div>
+              <div class="form-group">
+                <label>Unit Price (Rs.) *</label>
+                <input type="number" min="0" step="0.01" class="form-control" id="outward-price" placeholder="Selling price" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Customer Name *</label>
+              <input type="text" class="form-control" id="outward-customer" placeholder="e.g. FreshMart Distributors" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="padding:0.65rem;">
+              <i class="fa-solid fa-truck-dispatch"></i> Dispatch finished goods
+            </button>
+          </form>
+        </div>
+
+        <!-- Finished Goods Stock status card -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Finished Goods Available</span>
+          </div>
+          <div class="stock-cover-list" id="outward-stock-container" style="max-height: 180px; overflow-y:auto;">
+            <!-- Loaded dynamically -->
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <div class="nav-tab active" data-target="view-order" onclick="app.switchView('view-order', this)">
+        <i class="fa-solid fa-cart-shopping"></i>
+        <span>1. Order</span>
+      </div>
+      <div class="nav-tab" data-target="view-inward" onclick="app.switchView('view-inward', this)">
+        <i class="fa-solid fa-circle-down"></i>
+        <span>2. Inward</span>
+      </div>
+      <div class="nav-tab" data-target="view-production" onclick="app.switchView('view-production', this)">
+        <i class="fa-solid fa-gears"></i>
+        <span>3. Produce</span>
+      </div>
+      <div class="nav-tab" data-target="view-outward" onclick="app.switchView('view-outward', this)">
+        <i class="fa-solid fa-truck-dispatch"></i>
+        <span>4. Outward</span>
+      </div>
+    </nav>
+  </div>
+
+  <!-- MODALS -->
+
+  <!-- A. SETTINGS & CLOUD SYNC CONFIG MODAL -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal-content" style="max-width: 380px;">
+      <div class="modal-header">
+        <h2>Supabase Cloud Database Settings</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-settings')">&times;</button>
+      </div>
+      <form id="settings-form" onsubmit="app.saveSettings(event)">
+        <div class="modal-body">
+          <div class="alert-banner warning" style="margin-bottom: 1rem;">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Set up Supabase URL and Key to sync this mobile console with your main cloud ledger database.</span>
+          </div>
+
+          <div class="form-group">
+            <label>Supabase URL</label>
+            <input type="text" class="form-control" id="set-sup-url" placeholder="https://xxxx.supabase.co">
+          </div>
+
+          <div class="form-group">
+            <label>Supabase Anon API Key</label>
+            <input type="password" class="form-control" id="set-sup-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+          </div>
+
+          <div style="margin: 1rem 0; border-top: 1px solid var(--border-color); padding-top: 1rem; display:flex; flex-direction:column; gap:0.5rem;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="app.seedDatabase()" style="width:100%;">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Seed Sandbox Ingredients
+            </button>
+            <button type="button" class="btn btn-danger-sm btn-sm" onclick="app.resetLocalStorage()" style="width:100%; text-align:center;">
+              <i class="fa-solid fa-trash-can"></i> WIPE LOCAL STORAGE
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-settings')">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="width:auto;">Save Config</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- B. PURCHASE BILL EXTRACTED ITEMS REVIEW MODAL -->
+  <div class="modal-overlay" id="modal-verify-inward">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Review Inward Purchase Bill</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-verify-inward')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Invoice Number *</label>
+            <input type="text" class="form-control" id="vi-invoice">
+          </div>
+          <div class="form-group">
+            <label>Link Associate Order *</label>
+            <select class="form-control" id="vi-linked-order">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container" style="margin-top:0.5rem; max-height:220px; border:1px solid var(--border-color); border-radius:6px;">
+          <table class="verify-table">
+            <thead>
+              <tr>
+                <th>Extracted Material Code *</th>
+                <th>Qty *</th>
+                <th>Rate (Rs.) *</th>
+                <th>Supplier *</th>
+              </tr>
+            </thead>
+            <tbody id="verify-inward-rows">
+              <!-- Dynamically loaded -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-verify-inward')">Cancel</button>
+        <button class="btn btn-primary" onclick="app.commitVerifyInward()" style="width:auto;">Save Inward & Verify</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- C. SALES INVOICE EXTRACTED DISPATCH REVIEW MODAL -->
+  <div class="modal-overlay" id="modal-verify-outward">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Review Outward Sales Dispatch</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-verify-outward')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Sales Invoice Number *</label>
+            <input type="text" class="form-control" id="vo-invoice">
+          </div>
+          <div class="form-group">
+            <label>Customer Name *</label>
+            <input type="text" class="form-control" id="vo-customer">
+          </div>
+        </div>
+
+        <div class="table-container" style="margin-top:0.5rem; max-height:220px; border:1px solid var(--border-color); border-radius:6px;">
+          <table class="verify-table">
+            <thead>
+              <tr>
+                <th>Finished Good SKU *</th>
+                <th>Qty Shipped *</th>
+                <th>Selling Price *</th>
+              </tr>
+            </thead>
+            <tbody id="verify-outward-rows">
+              <!-- Dynamically loaded -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-verify-outward')">Cancel</button>
+        <button class="btn btn-primary" onclick="app.commitVerifyOutward()" style="width:auto;">Commit Shipped Goods</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logic scripts -->
+  <script src="app.js"></script>
+</body>
+</html>
