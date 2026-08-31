@@ -62,6 +62,11 @@ class DBClient {
         console.error("Failed to load local DB", e);
       }
     }
+
+    // Auto-seed sandbox items if database is empty on first boot
+    if (this.offlineDb.raw_materials.length === 0 && this.offlineDb.products.length === 0) {
+      this.seedSandboxData();
+    }
   }
 
   saveConfig(url, key) {
@@ -363,6 +368,20 @@ class DBClient {
     ];
 
     this.saveOfflineDb();
+
+    // Push sandbox items to Supabase cloud if connected
+    if (this.config.isOnline && this.supabase) {
+      try {
+        this.supabase.from('raw_materials').upsert(this.offlineDb.raw_materials).then(({ error }) => {
+          if (error) console.error("Cloud seed error (raw materials):", error);
+        });
+        this.supabase.from('products').upsert(this.offlineDb.products).then(({ error }) => {
+          if (error) console.error("Cloud seed error (products):", error);
+        });
+      } catch (e) {
+        console.error("Cloud seed exception:", e);
+      }
+    }
   }
 }
 
