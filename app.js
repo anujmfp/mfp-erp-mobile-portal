@@ -18,6 +18,8 @@ class DBClient {
       outwards: []
     };
     
+    this.seedingInProgress = false;
+
     this.config = {
       supabaseUrl: '',
       supabaseKey: '',
@@ -125,6 +127,13 @@ class DBClient {
         if (error) {
           console.error("Supabase error fetching raw materials:", error);
         } else if (data) {
+          if (data.length === 0 && !this.seedingInProgress) {
+            this.seedingInProgress = true;
+            console.log("Cloud raw_materials is empty. Auto-seeding cloud...");
+            await this.seedSandboxData();
+            this.seedingInProgress = false;
+            return [...this.offlineDb.raw_materials].sort((a, b) => a.name.localeCompare(b.name));
+          }
           return data;
         }
       } catch (e) {
@@ -141,6 +150,13 @@ class DBClient {
         if (error) {
           console.error("Supabase error fetching products:", error);
         } else if (data) {
+          if (data.length === 0 && !this.seedingInProgress) {
+            this.seedingInProgress = true;
+            console.log("Cloud products is empty. Auto-seeding cloud...");
+            await this.seedSandboxData();
+            this.seedingInProgress = false;
+            return [...this.offlineDb.products].sort((a, b) => a.name.localeCompare(b.name));
+          }
           return data;
         }
       } catch (e) {
