@@ -184,12 +184,24 @@ class DBClient {
 
   async insertOrder(order) {
     order.id = 'ord_' + Date.now();
-    order.created_at = new Date().toISOString();
+    const dateStr = order.date || new Date().toISOString().split('T')[0];
+    order.date = dateStr;
+    order.created_at = new Date(dateStr + 'T12:00:00Z').toISOString();
     order.status = 'Pending';
 
     if (this.config.isOnline && this.supabase) {
-      const { error } = await this.supabase.from('orders').insert([order]);
-      if (error) console.error(error);
+      const payload = {
+        id: order.id,
+        created_at: order.created_at,
+        material_id: order.material_id,
+        material_name: order.material_name,
+        quantity_requested: order.quantity_requested,
+        vendor_name: order.vendor_name,
+        price_suggested: order.price_suggested,
+        status: order.status
+      };
+      const { error } = await this.supabase.from('orders').insert([payload]);
+      if (error) console.error("Error inserting order to Supabase:", error);
     }
     
     this.offlineDb.orders.push(order);
@@ -199,7 +211,9 @@ class DBClient {
 
   async insertInward(inward) {
     inward.id = 'inw_' + Date.now();
-    inward.created_at = new Date().toISOString();
+    const dateStr = inward.date || new Date().toISOString().split('T')[0];
+    inward.date = dateStr;
+    inward.created_at = new Date(dateStr + 'T12:00:00Z').toISOString();
 
     // Update Raw Materials Stock in DB
     const materials = await this.getRawMaterials();
@@ -226,8 +240,21 @@ class DBClient {
     }
 
     if (this.config.isOnline && this.supabase) {
-      const { error } = await this.supabase.from('inwards').insert([inward]);
-      if (error) console.error(error);
+      const payload = {
+        id: inward.id,
+        created_at: inward.created_at,
+        invoice_no: inward.invoice_no,
+        material_id: inward.material_id,
+        material_name: inward.material_name,
+        quantity_received: inward.quantity_received,
+        rate_billed: inward.rate_billed,
+        supplier: inward.supplier,
+        linked_order_id: inward.linked_order_id,
+        has_variance: inward.has_variance,
+        variance_notes: inward.variance_notes
+      };
+      const { error } = await this.supabase.from('inwards').insert([payload]);
+      if (error) console.error("Error inserting inward to Supabase:", error);
     }
     
     this.offlineDb.inwards.push(inward);
@@ -237,7 +264,9 @@ class DBClient {
 
   async insertProduction(prod) {
     prod.id = 'run_' + Date.now();
-    prod.created_at = new Date().toISOString();
+    const dateStr = prod.date || new Date().toISOString().split('T')[0];
+    prod.date = dateStr;
+    prod.created_at = new Date(dateStr + 'T12:00:00Z').toISOString();
 
     const products = await this.getProducts();
     const rawMaterials = await this.getRawMaterials();
@@ -261,8 +290,16 @@ class DBClient {
     }
 
     if (this.config.isOnline && this.supabase) {
-      const { error } = await this.supabase.from('productions').insert([prod]);
-      if (error) console.error(error);
+      const payload = {
+        id: prod.id,
+        created_at: prod.created_at,
+        product_id: prod.product_id,
+        product_name: prod.product_name,
+        quantity_produced: prod.quantity_produced,
+        packaging_type: prod.packaging_type
+      };
+      const { error } = await this.supabase.from('productions').insert([payload]);
+      if (error) console.error("Error inserting production to Supabase:", error);
     }
     
     this.offlineDb.productions.push(prod);
@@ -272,7 +309,9 @@ class DBClient {
 
   async insertOutward(outward) {
     outward.id = 'otw_' + Date.now();
-    outward.created_at = new Date().toISOString();
+    const dateStr = outward.date || new Date().toISOString().split('T')[0];
+    outward.date = dateStr;
+    outward.created_at = new Date(dateStr + 'T12:00:00Z').toISOString();
 
     // Deduct Finished Goods stock level
     const products = await this.getProducts();
@@ -283,8 +322,18 @@ class DBClient {
     }
 
     if (this.config.isOnline && this.supabase) {
-      const { error } = await this.supabase.from('outwards').insert([outward]);
-      if (error) console.error(error);
+      const payload = {
+        id: outward.id,
+        created_at: outward.created_at,
+        invoice_no: outward.invoice_no,
+        product_id: outward.product_id,
+        product_name: outward.product_name,
+        quantity_dispatched: outward.quantity_dispatched,
+        price_billed: outward.price_billed,
+        customer: outward.customer
+      };
+      const { error } = await this.supabase.from('outwards').insert([payload]);
+      if (error) console.error("Error inserting outward to Supabase:", error);
     }
     
     this.offlineDb.outwards.push(outward);
@@ -415,6 +464,25 @@ class MFPMobilePortal {
     this.init();
   }
 
+  getTodayDate() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  initDateInputs() {
+    const today = this.getTodayDate();
+    const dateInputIds = ['order-date', 'inward-date', 'production-date', 'outward-date', 'vi-date', 'vo-date'];
+    dateInputIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && !el.value) {
+        el.value = today;
+      }
+    });
+  }
+
   async init() {
     // Navigation listeners
     document.querySelectorAll('.bottom-nav .nav-tab').forEach(tab => {
@@ -424,6 +492,7 @@ class MFPMobilePortal {
       });
     });
 
+    this.initDateInputs();
     this.loadSettingsForm();
     await this.refreshAllViews();
   }
@@ -439,6 +508,7 @@ class MFPMobilePortal {
       tabElement.classList.add('active');
     }
 
+    this.initDateInputs();
     this.refreshActivePane(viewId);
   }
 
@@ -487,10 +557,11 @@ class MFPMobilePortal {
     pendings.forEach(ord => {
       const div = document.createElement('div');
       div.className = 'stock-cover-item';
+      const dateDisplay = ord.date || (ord.created_at ? ord.created_at.split('T')[0] : 'N/A');
       div.innerHTML = `
         <div>
           <div class="td-bold" style="font-size:0.85rem;">${ord.material_name}</div>
-          <div class="td-muted" style="font-size:0.75rem;">Qty: ${ord.quantity_requested} • Vendor: ${ord.vendor_name || 'N/A'}</div>
+          <div class="td-muted" style="font-size:0.75rem;">Date: ${dateDisplay} • Qty: ${ord.quantity_requested} • Vendor: ${ord.vendor_name || 'N/A'}</div>
         </div>
         <span class="badge badge-warning" style="font-size:0.65rem;">Pending</span>
       `;
@@ -501,6 +572,7 @@ class MFPMobilePortal {
   async handleOrderSubmit(e) {
     e.preventDefault();
 
+    const orderDate = (document.getElementById('order-date') && document.getElementById('order-date').value) || this.getTodayDate();
     const matId = document.getElementById('order-material').value;
     const qty = parseFloat(document.getElementById('order-qty').value) || 0;
     const price = parseFloat(document.getElementById('order-price').value) || 0;
@@ -513,6 +585,7 @@ class MFPMobilePortal {
     if (!mat) return;
 
     const order = await this.db.insertOrder({
+      date: orderDate,
       material_id: matId,
       material_name: mat.name,
       quantity_requested: qty,
@@ -520,8 +593,9 @@ class MFPMobilePortal {
       price_suggested: price || 0
     });
 
-    // Compile WhatsApp order request
+    // Compile WhatsApp order request with Date
     const waText = `📦 *MFP ERP - Purchase Order Request*\n` +
+                   `• *Date:* ${orderDate}\n` +
                    `• *Material:* ${mat.name} (${mat.code})\n` +
                    `• *Quantity Needed:* ${qty} ${mat.unit}\n` +
                    (vendor ? `• *Suggested Vendor:* ${vendor}\n` : '') +
@@ -532,6 +606,7 @@ class MFPMobilePortal {
     document.getElementById('order-wa-widget').classList.remove('hidden');
 
     document.getElementById('order-form').reset();
+    this.initDateInputs();
     await this.renderOrderPane();
   }
 
@@ -579,6 +654,8 @@ class MFPMobilePortal {
 
       // Populate review modal
       document.getElementById('vi-invoice').value = extracted.invoice_no;
+      const viDateEl = document.getElementById('vi-date');
+      if (viDateEl) viDateEl.value = extracted.date || this.getTodayDate();
 
       const orderSelect = document.getElementById('vi-linked-order');
       orderSelect.innerHTML = '<option value="">-- No Link (Standalone Inward) --</option>';
@@ -623,6 +700,7 @@ class MFPMobilePortal {
   // Commit verify purchase receipt and trigger crosscheck validations
   async commitVerifyInward() {
     const invoiceNo = document.getElementById('vi-invoice').value.trim();
+    const inwardDate = (document.getElementById('vi-date') && document.getElementById('vi-date').value) || this.getTodayDate();
     const linkedOrderId = document.getElementById('vi-linked-order').value;
     const materialId = document.getElementById('vi-mapped-material').value;
     const qty = parseFloat(document.getElementById('vi-qty').value) || 0;
@@ -640,6 +718,7 @@ class MFPMobilePortal {
 
     this.closeModal('modal-verify-inward');
     await this.processInwardIngest({
+      date: inwardDate,
       invoice_no: invoiceNo,
       material_id: materialId,
       material_name: mat.name,
@@ -655,6 +734,7 @@ class MFPMobilePortal {
     e.preventDefault();
 
     const invoiceNo = document.getElementById('inward-invoice').value.trim();
+    const inwardDate = (document.getElementById('inward-date') && document.getElementById('inward-date').value) || this.getTodayDate();
     const linkedOrderId = document.getElementById('inward-linked-order').value;
     const qty = parseFloat(document.getElementById('inward-qty').value) || 0;
     const rate = parseFloat(document.getElementById('inward-rate').value) || 0;
@@ -667,6 +747,7 @@ class MFPMobilePortal {
     if (!ord) return;
 
     await this.processInwardIngest({
+      date: inwardDate,
       invoice_no: invoiceNo,
       material_id: ord.material_id,
       material_name: ord.material_name,
@@ -677,6 +758,7 @@ class MFPMobilePortal {
     });
 
     document.getElementById('inward-manual-form').reset();
+    this.initDateInputs();
   }
 
   // Cross-check Inward bill details with associated purchase order placed
@@ -709,8 +791,9 @@ class MFPMobilePortal {
 
           varianceNotes = issues.join(', ');
 
-          // Formulate WhatsApp Variance Alert
+          // Formulate WhatsApp Variance Alert with Date
           waText = `⚠️ *MFP ERP - Inward Variance Warning*\n` +
+                   `• *Date:* ${inward.date || this.getTodayDate()}\n` +
                    `• *Material:* ${inward.material_name}\n` +
                    `• *Invoice / Bill No:* ${inward.invoice_no}\n` +
                    `• *Supplier:* ${inward.supplier}\n\n` +
@@ -854,6 +937,7 @@ class MFPMobilePortal {
   async handleProductionSubmit(e) {
     e.preventDefault();
 
+    const prodDate = (document.getElementById('production-date') && document.getElementById('production-date').value) || this.getTodayDate();
     const pId = document.getElementById('production-product').value;
     const qtyProduced = parseFloat(document.getElementById('production-qty').value) || 0;
 
@@ -885,8 +969,9 @@ class MFPMobilePortal {
       if (!proceed) return;
     }
 
-    // Commit daily production run log
+    // Commit daily production run log with custom date
     await this.db.insertProduction({
+      date: prodDate,
       product_id: pId,
       product_name: prod.name,
       quantity_produced: qtyProduced,
@@ -895,10 +980,11 @@ class MFPMobilePortal {
 
     // Clear form inputs
     document.getElementById('production-form').reset();
+    this.initDateInputs();
     document.getElementById('production-checklist').innerHTML = `<span class="td-muted italic">Select a product SKU and batch size to forecast ingredient checklists.</span>`;
 
     await this.refreshAllViews();
-    alert(`Success! Recorded manufacture batch of ${qtyProduced} pcs. Ingredients reduced & Finished Goods incremented.`);
+    alert(`Success! Recorded manufacture batch of ${qtyProduced} pcs on ${prodDate}. Ingredients reduced & Finished Goods incremented.`);
   }
 
 
@@ -970,6 +1056,8 @@ class MFPMobilePortal {
 
       // Populate review modal
       document.getElementById('vo-invoice').value = extracted.invoice_no;
+      const voDateEl = document.getElementById('vo-date');
+      if (voDateEl) voDateEl.value = extracted.date || this.getTodayDate();
       document.getElementById('vo-customer').value = 'FreshMart Wholesalers'; // Mock customer
 
       const tbody = document.getElementById('verify-outward-rows');
@@ -1025,6 +1113,7 @@ class MFPMobilePortal {
 
   async commitVerifyOutward() {
     const invoiceNo = document.getElementById('vo-invoice').value.trim();
+    const outwardDate = (document.getElementById('vo-date') && document.getElementById('vo-date').value) || this.getTodayDate();
     const customer = document.getElementById('vo-customer').value.trim();
 
     if (!invoiceNo || !customer) {
@@ -1062,6 +1151,7 @@ class MFPMobilePortal {
       const p = products.find(prod => prod.id === item.product_id);
       if (p) {
         await this.db.insertOutward({
+          date: outwardDate,
           invoice_no: invoiceNo,
           product_id: item.product_id,
           product_name: p.name,
@@ -1073,13 +1163,14 @@ class MFPMobilePortal {
     }
 
     await this.refreshAllViews();
-    alert("Outward committed! Shipped quantities deducted from Finished Goods available.");
+    alert(`Outward committed for ${outwardDate}! Shipped quantities deducted from Finished Goods available.`);
   }
 
   async handleManualOutwardSubmit(e) {
     e.preventDefault();
 
     const invoiceNo = document.getElementById('outward-invoice').value.trim();
+    const outwardDate = (document.getElementById('outward-date') && document.getElementById('outward-date').value) || this.getTodayDate();
     const pId = document.getElementById('outward-product').value;
     const qty = parseFloat(document.getElementById('outward-qty').value) || 0;
     const price = parseFloat(document.getElementById('outward-price').value) || 0;
@@ -1098,6 +1189,7 @@ class MFPMobilePortal {
     }
 
     await this.db.insertOutward({
+      date: outwardDate,
       invoice_no: invoiceNo,
       product_id: pId,
       product_name: prod.name,
@@ -1107,8 +1199,9 @@ class MFPMobilePortal {
     });
 
     document.getElementById('outward-manual-form').reset();
+    this.initDateInputs();
     await this.refreshAllViews();
-    alert(`Dispatch committed! Reduced stock cover for ${prod.name}.`);
+    alert(`Dispatch committed for ${outwardDate}! Reduced stock cover for ${prod.name}.`);
   }
 
 

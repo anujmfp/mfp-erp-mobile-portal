@@ -7,7 +7,7 @@
   <!-- Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="style.css?v=1.2">
+  <link rel="stylesheet" href="style.css?v=1.3">
   <!-- Supabase JS Client SDK via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Mozilla PDF.js Library via CDN -->
@@ -43,6 +43,17 @@
           </div>
           
           <form id="order-form" onsubmit="app.handleOrderSubmit(event)">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Order Date *</label>
+                <input type="date" class="form-control" id="order-date" required>
+              </div>
+              <div class="form-group">
+                <label>Vendor / Supplier Name</label>
+                <input type="text" class="form-control" id="order-vendor" placeholder="e.g. Agro Supplies Ltd">
+              </div>
+            </div>
+
             <div class="form-group">
               <label>Raw Material / Ingredient *</label>
               <select class="form-control" id="order-material" required>
@@ -59,11 +70,6 @@
                 <label>Target Price (Rs.)</label>
                 <input type="number" step="0.01" class="form-control" id="order-price" placeholder="e.g. 180">
               </div>
-            </div>
-
-            <div class="form-group">
-              <label>Vendor / Supplier Name</label>
-              <input type="text" class="form-control" id="order-vendor" placeholder="e.g. Agro Supplies Ltd">
             </div>
 
             <button type="submit" class="btn btn-primary" style="padding: 0.65rem;">
@@ -121,9 +127,15 @@
           <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
 
           <form id="inward-manual-form" onsubmit="app.handleManualInwardSubmit(event)">
-            <div class="form-group">
-              <label>Bill / Invoice Reference *</label>
-              <input type="text" class="form-control" id="inward-invoice" placeholder="e.g. INV-9034" required>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Bill / Invoice Reference *</label>
+                <input type="text" class="form-control" id="inward-invoice" placeholder="e.g. INV-9034" required>
+              </div>
+              <div class="form-group">
+                <label>Inward Date *</label>
+                <input type="date" class="form-control" id="inward-date" required>
+              </div>
             </div>
 
             <div class="form-group">
@@ -195,9 +207,15 @@
               </select>
             </div>
 
-            <div class="form-group">
-              <label>Quantity Manufactured (pcs) *</label>
-              <input type="number" step="1" min="1" class="form-control" id="production-qty" placeholder="Enter number of pieces" oninput="app.updateProductionRecipeChecklist()" required>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Production Date *</label>
+                <input type="date" class="form-control" id="production-date" required>
+              </div>
+              <div class="form-group">
+                <label>Quantity (pcs) *</label>
+                <input type="number" step="1" min="1" class="form-control" id="production-qty" placeholder="Enter number of pieces" oninput="app.updateProductionRecipeChecklist()" required>
+              </div>
             </div>
 
             <!-- Material Forecast Cover Checklist -->
@@ -249,9 +267,15 @@
           <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
 
           <form id="outward-manual-form" onsubmit="app.handleManualOutwardSubmit(event)">
-            <div class="form-group">
-              <label>Sales Invoice Number *</label>
-              <input type="text" class="form-control" id="outward-invoice" placeholder="e.g. IN-1002" required>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Sales Invoice Number *</label>
+                <input type="text" class="form-control" id="outward-invoice" placeholder="e.g. IN-1002" required>
+              </div>
+              <div class="form-group">
+                <label>Dispatch Date *</label>
+                <input type="date" class="form-control" id="outward-date" required>
+              </div>
             </div>
 
             <div class="form-group">
@@ -308,7 +332,7 @@
       </div>
       <div class="nav-tab" data-target="view-production" onclick="app.switchView('view-production', this)">
         <i class="fa-solid fa-gears"></i>
-        <span>3. Produce</span>
+        <span>3. Production</span>
       </div>
       <div class="nav-tab" data-target="view-outward" onclick="app.switchView('view-outward', this)">
         <i class="fa-solid fa-truck-dispatch"></i>
@@ -374,11 +398,15 @@
             <input type="text" class="form-control" id="vi-invoice">
           </div>
           <div class="form-group">
-            <label>Link Associate Order *</label>
-            <select class="form-control" id="vi-linked-order">
-              <!-- Dynamically populated -->
-            </select>
+            <label>Inward Date *</label>
+            <input type="date" class="form-control" id="vi-date">
           </div>
+        </div>
+        <div class="form-group">
+          <label>Link Associate Order *</label>
+          <select class="form-control" id="vi-linked-order">
+            <!-- Dynamically populated -->
+          </select>
         </div>
 
         <div class="table-container" style="margin-top:0.5rem; max-height:220px; border:1px solid var(--border-color); border-radius:6px;">
@@ -418,9 +446,13 @@
             <input type="text" class="form-control" id="vo-invoice">
           </div>
           <div class="form-group">
-            <label>Customer Name *</label>
-            <input type="text" class="form-control" id="vo-customer">
+            <label>Dispatch Date *</label>
+            <input type="date" class="form-control" id="vo-date">
           </div>
+        </div>
+        <div class="form-group">
+          <label>Customer Name *</label>
+          <input type="text" class="form-control" id="vo-customer">
         </div>
 
         <div class="table-container" style="margin-top:0.5rem; max-height:220px; border:1px solid var(--border-color); border-radius:6px;">
@@ -446,6 +478,6 @@
   </div>
 
   <!-- Logic scripts -->
-  <script src="app.js?v=1.2"></script>
+  <script src="app.js?v=1.3"></script>
 </body>
 </html>
