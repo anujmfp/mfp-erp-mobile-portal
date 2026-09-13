@@ -639,15 +639,48 @@ class MFPMobilePortal {
     }
   }
 
-  // Read purchase invoice bill PDF via pdf.js
+  // Read purchase invoice bill PDF or Image/Photo via pdf.js & Tesseract OCR
   async handleInwardUpload(file) {
-    if (!file || file.type !== 'application/pdf') {
-      alert("Invalid format. Purchase bill must be a PDF file.");
+    if (!file) return;
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|gif|bmp|webp)$/i.test(file.name);
+
+    if (!isPdf && !isImage) {
+      alert("Unsupported format. Please upload a PDF or an image (JPEG, PNG, GIF, BMP) or snap a photo with your camera.");
       return;
     }
 
+    // Show loading indicator
+    let loadingDiv = document.getElementById('inward-loading-spinner');
+    if (!loadingDiv) {
+      loadingDiv = document.createElement('div');
+      loadingDiv.id = 'inward-loading-spinner';
+      loadingDiv.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(2,6,23,0.88); z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; backdrop-filter:blur(4px);';
+      loadingDiv.innerHTML = `
+        <div style="font-size:2.5rem; margin-bottom:1rem; color:var(--color-primary);"><i class="fa-solid fa-spinner fa-spin"></i></div>
+        <div style="font-size:1.1rem; font-weight:600;" id="inward-spinner-text">Analyzing Bill...</div>
+        <div style="font-size:0.8rem; color:#94a3b8; margin-top:0.35rem;">Extracting invoice details</div>
+      `;
+      document.body.appendChild(loadingDiv);
+    } else {
+      loadingDiv.style.display = 'flex';
+      document.getElementById('inward-spinner-text').textContent = 'Analyzing Bill...';
+    }
+
     try {
-      const rawText = await this.parsePDFText(file);
+      let rawText = '';
+      let imagePreviewUrl = null;
+
+      if (isPdf) {
+        document.getElementById('inward-spinner-text').textContent = 'Extracting PDF Text...';
+        rawText = await this.parsePDFText(file);
+      } else if (isImage) {
+        document.getElementById('inward-spinner-text').textContent = 'Scanning Photo / Image (OCR)...';
+        imagePreviewUrl = URL.createObjectURL(file);
+        rawText = await this.parseImageText(file);
+      }
+
       const extracted = this.heuristicsExtractPurchase(rawText);
 
       this.currentVerifyInwardItem = extracted;
@@ -656,6 +689,19 @@ class MFPMobilePortal {
       document.getElementById('vi-invoice').value = extracted.invoice_no;
       const viDateEl = document.getElementById('vi-date');
       if (viDateEl) viDateEl.value = extracted.date || this.getTodayDate();
+
+      // Show/Hide photo preview in review modal
+      const imgPreviewContainer = document.getElementById('vi-image-preview-container');
+      const imgPreview = document.getElementById('vi-image-preview');
+      if (imgPreviewContainer && imgPreview) {
+        if (imagePreviewUrl) {
+          imgPreview.src = imagePreviewUrl;
+          imgPreviewContainer.style.display = 'block';
+        } else {
+          imgPreviewContainer.style.display = 'none';
+          imgPreview.src = '';
+        }
+      }
 
       const orderSelect = document.getElementById('vi-linked-order');
       orderSelect.innerHTML = '<option value="">-- No Link (Standalone Inward) --</option>';
@@ -693,7 +739,13 @@ class MFPMobilePortal {
       this.openModal('modal-verify-inward');
     } catch (e) {
       console.error(e);
-      alert("Failed to parse invoice PDF text: " + e.message);
+      alert("Failed to analyze bill: " + e.message);
+    } finally {
+      if (loadingDiv) loadingDiv.style.display = 'none';
+      const fileInput = document.getElementById('inward-file-input');
+      if (fileInput) fileInput.value = '';
+      const camInput = document.getElementById('inward-camera-input');
+      if (camInput) camInput.value = '';
     }
   }
 
@@ -1231,15 +1283,64 @@ class MFPMobilePortal {
     });
   }
 
+  async parseImageText(file) {
+    if (typeof Tesseract !== 'undefined' && Tesseract.recognize) {
+      try {
+        const spinnerText = document.getElementById('inward-spinner-text');
+        const { data: { text } } = await Tesseract.recognize(file, 'eng', {
+          logger: (m) => {
+            if (m.status === 'recognizing text' && m.progress && spinnerText) {
+              spinnerText.textContent = `Scanning OCR (${Math.round(m.progress * 100)}%)...`;
+            }
+          }
+        });
+        return text || '';
+      } catch (err) {
+        console.warn("Tesseract OCR warning:", err);
+      }
+    }
+    return '';
+  }
+
   heuristicsExtractPurchase(text) {
-    const result = { invoice_no: 'PUR-' + Math.floor(1000 + Math.random() * 9000), date: new Date().toISOString().split('T')[0], raw_text_name: 'Raw Dried Red Chilli', quantity: 50.00, rate: 180.00, supplier: 'Agro Supplies Ltd' };
-    
-    // Extractor triggers
+    const result = {
+      invoice_no: 'PUR-' + Math.floor(1000 + Math.random() * 9000),
+      date: this.getTodayDate(),
+      raw_text_name: 'Raw Dried Red Chilli',
+      quantity: 50.00,
+      rate: 180.00,
+      supplier: 'Agro Supplies Ltd'
+    };
+
+    if (!text) return result;
+
+    // Try finding date in YYYY-MM-DD or DD/MM/YYYY or DD-MM-YYYY
+    const dateMatch = text.match(/\b(20\d\d[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01]))\b/) ||
+                      text.match(/\b((?:0[1-9]|[12]\d|3[01])[-/.](?:0[1-9]|1[0-2])[-/.]20\d\d)\b/);
+    if (dateMatch) {
+      const rawDate = dateMatch[1].replace(/[/.]/g, '-');
+      const parts = rawDate.split('-');
+      if (parts[0].length === 4) {
+        result.date = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      } else if (parts[2].length === 4) {
+        result.date = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+
+    // Try finding invoice number
+    const invMatch = text.match(/(?:inv(?:oice)?|bill|ref)[\s#.:-]*([A-Za-z0-9\-_/]+)/i);
+    if (invMatch && invMatch[1].length >= 3) {
+      result.invoice_no = invMatch[1].trim();
+    }
+
+    // Extractor triggers for quantity and rate
     const numMatches = text.match(/\b\d+(?:\.\d+)?\b/g);
-    if (numMatches && numMatches.length >= 3) {
-      // Mock extract details if numeric relationships found
-      result.quantity = parseFloat(numMatches[0]) || 50;
-      result.rate = parseFloat(numMatches[1]) || 180;
+    if (numMatches && numMatches.length >= 2) {
+      const nums = numMatches.map(n => parseFloat(n)).filter(n => n > 0 && n < 1000000);
+      if (nums.length >= 2) {
+        result.quantity = nums[0];
+        result.rate = nums[1];
+      }
     }
     return result;
   }
