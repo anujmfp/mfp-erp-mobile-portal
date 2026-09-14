@@ -1001,16 +1001,25 @@ class MFPMobilePortal {
       const unit = selectedMat ? selectedMat.unit : 'unit';
       const subtotal = (item.quantity || 0) * (item.rate || 0);
 
-      // Construct dropdown with optgroups
+      // Construct dropdown with optgroups grouped by PO / Vendor
       let optionsHtml = '<option value="" disabled selected>-- Link Order or Select Material --</option>';
 
       if (pendingOrders.length > 0) {
-        optionsHtml += '<optgroup label="📋 Pending Purchase Orders">';
+        const grouped = {};
         pendingOrders.forEach(o => {
-          const isSel = item.linked_order_id === o.id ? 'selected' : '';
-          optionsHtml += `<option value="${o.id}" ${isSel}>Order: ${o.material_name} (Req: ${o.quantity_requested} pcs) - ${o.vendor_name || 'PO'}</option>`;
+          const key = o.order_group_id ? `PO: ${o.order_group_id} • ${o.vendor_name || 'Vendor'}` : (o.vendor_name ? `Vendor: ${o.vendor_name}` : 'Pending Orders');
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(o);
         });
-        optionsHtml += '</optgroup>';
+
+        Object.keys(grouped).forEach(grpKey => {
+          optionsHtml += `<optgroup label="📋 ${grpKey}">`;
+          grouped[grpKey].forEach(o => {
+            const isSel = item.linked_order_id === o.id ? 'selected' : '';
+            optionsHtml += `<option value="${o.id}" ${isSel}>${o.material_name} (Req: ${o.quantity_requested} pcs @ Rs.${o.price_suggested || 0})</option>`;
+          });
+          optionsHtml += `</optgroup>`;
+        });
       }
 
       optionsHtml += '<optgroup label="📦 Direct Material Inward (No PO)">';
@@ -1024,11 +1033,19 @@ class MFPMobilePortal {
         ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeInwardItemRow(${index})"><i class="fa-solid fa-trash-can"></i> Remove</button>`
         : '';
 
+      const linkedOrd = item.linked_order_id ? orders.find(o => o.id === item.linked_order_id) : null;
+      const linkedBadgeHtml = linkedOrd
+        ? `<div style="display:inline-flex; align-items:center; gap:0.25rem; font-size:0.68rem; color:var(--color-primary); background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.25); padding:0.15rem 0.4rem; border-radius:4px; margin-bottom:0.35rem;">
+             <i class="fa-solid fa-link"></i> Linked: <strong>${linkedOrd.order_group_id ? '[' + linkedOrd.order_group_id + '] ' : ''}${linkedOrd.material_name}</strong> (${linkedOrd.quantity_requested} pcs @ Rs.${linkedOrd.price_suggested || 0})
+           </div>`
+        : '';
+
       box.innerHTML = `
         <div class="multi-item-header">
           <span><i class="fa-solid fa-circle-down"></i> Inward Item #${index + 1}</span>
           ${removeBtnHtml}
         </div>
+        ${linkedBadgeHtml}
         <div class="form-group" style="margin-bottom:0.45rem;">
           <select class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateInwardItem(${index}, 'select_source', this.value)" required>
             ${optionsHtml}
@@ -1057,6 +1074,122 @@ class MFPMobilePortal {
     if (submitBtn) {
       submitBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> Commit Inward & Verify (${this.inwardItems.length} Item${this.inwardItems.length > 1 ? 's' : ''})`;
     }
+  }
+
+  // --- MULTI-ORDER SELECTION MODAL CONTROLLER ---
+
+  async openSelectOrdersModal() {
+    const orders = await this.db.getOrders();
+    const pendings = orders.filter(o => o.status === 'Pending');
+
+    if (pendings.length === 0) {
+      alert("No pending purchase orders available to inward.");
+      return;
+    }
+
+    const container = document.getElementById('pending-orders-select-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Group pending orders by PO group or Vendor
+    const grouped = {};
+    pendings.forEach(ord => {
+      const grpKey = ord.order_group_id ? ord.order_group_id : (ord.vendor_name ? `Vendor: ${ord.vendor_name}` : 'Individual Orders');
+      if (!grouped[grpKey]) grouped[grpKey] = [];
+      grouped[grpKey].push(ord);
+    });
+
+    Object.keys(grouped).forEach(grpKey => {
+      const grpOrders = grouped[grpKey];
+      const vendorName = grpOrders[0] ? (grpOrders[0].vendor_name || 'Vendor') : 'Vendor';
+      const grpIdSanitized = grpKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      const grpCard = document.createElement('div');
+      grpCard.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem;';
+
+      let itemsHtml = '';
+      grpOrders.forEach(ord => {
+        const priceStr = ord.price_suggested ? ` @ Rs. ${parseFloat(ord.price_suggested).toFixed(2)}` : '';
+        itemsHtml += `
+          <label style="display:flex; align-items:center; gap:0.55rem; padding:0.4rem 0.2rem; font-size:0.8rem; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.04);">
+            <input type="checkbox" class="pending-order-checkbox grp-order-${grpIdSanitized}" value="${ord.id}" data-vendor="${ord.vendor_name || ''}" onchange="app.updateSelectedOrdersCount()" style="width:16px; height:16px; accent-color:var(--color-primary); cursor:pointer;">
+            <div style="flex:1;">
+              <div style="font-weight:600; color:var(--text-color);">${ord.material_name}</div>
+              <div style="font-size:0.7rem; color:var(--text-muted);">Req: <strong>${ord.quantity_requested} pcs</strong>${priceStr} • ${ord.date || ''}</div>
+            </div>
+          </label>
+        `;
+      });
+
+      grpCard.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem; padding-bottom:0.35rem; border-bottom:1px solid var(--border-color);">
+          <div>
+            <span style="font-weight:700; font-size:0.82rem; color:var(--color-primary);"><i class="fa-solid fa-boxes-stacked"></i> ${grpKey}</span>
+            <div style="font-size:0.7rem; color:var(--text-muted);">${vendorName} (${grpOrders.length} item${grpOrders.length > 1 ? 's' : ''})</div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.toggleSelectAllOrdersInGroup('${grpIdSanitized}')" style="font-size:0.7rem; padding:0.2rem 0.5rem;">
+            Select All
+          </button>
+        </div>
+        <div>
+          ${itemsHtml}
+        </div>
+      `;
+      container.appendChild(grpCard);
+    });
+
+    this.updateSelectedOrdersCount();
+    this.openModal('modal-select-pending-orders');
+  }
+
+  toggleSelectAllOrdersInGroup(grpIdSanitized) {
+    const cbs = document.querySelectorAll(`.pending-order-checkbox.grp-order-${grpIdSanitized}`);
+    if (cbs.length === 0) return;
+    const anyUnchecked = Array.from(cbs).some(cb => !cb.checked);
+    cbs.forEach(cb => { cb.checked = anyUnchecked; });
+    this.updateSelectedOrdersCount();
+  }
+
+  updateSelectedOrdersCount() {
+    const checked = document.querySelectorAll('.pending-order-checkbox:checked');
+    const btn = document.getElementById('btn-commit-selected-orders');
+    if (btn) {
+      btn.innerHTML = `<i class="fa-solid fa-arrow-down"></i> Load Selected into Inward (${checked.length})`;
+      btn.disabled = (checked.length === 0);
+    }
+  }
+
+  async commitSelectedOrdersToInward() {
+    const checked = Array.from(document.querySelectorAll('.pending-order-checkbox:checked'));
+    if (checked.length === 0) {
+      alert("Please select at least one pending order to inward.");
+      return;
+    }
+
+    const orders = await this.db.getOrders();
+    const selectedIds = checked.map(cb => cb.value);
+    const selectedOrders = orders.filter(o => selectedIds.includes(o.id));
+
+    if (selectedOrders.length === 0) return;
+
+    this.inwardItems = selectedOrders.map(ord => ({
+      linked_order_id: ord.id,
+      material_id: ord.material_id,
+      quantity: parseFloat(ord.quantity_requested) || 1,
+      rate: parseFloat(ord.price_suggested) || 0
+    }));
+
+    // Auto-fill supplier in form
+    const firstVendor = selectedOrders[0].vendor_name;
+    const suppInput = document.getElementById('inward-supplier');
+    if (suppInput && firstVendor) {
+      suppInput.value = firstVendor;
+    }
+
+    this.closeModal('modal-select-pending-orders');
+    await this.renderInwardItems();
+
+    alert(`Success! Loaded ${selectedOrders.length} pending order items for "${firstVendor || 'Vendor'}" into the inward form. Enter your Bill / Invoice Reference to proceed.`);
   }
 
   // Handle manual form submission for Inward
@@ -1171,15 +1304,26 @@ class MFPMobilePortal {
         }
       }
 
-      // Populate associated order dropdown
+      // Populate associated PO groups dropdown in header
       const orderSelect = document.getElementById('vi-linked-order');
-      orderSelect.innerHTML = '<option value="">-- No Link (Standalone Inward) --</option>';
-      const orders = await this.db.getOrders();
-      const pendings = orders.filter(o => o.status === 'Pending');
-      pendings.forEach(o => {
-        const selected = o.material_name.toLowerCase().includes(extracted.raw_text_name.toLowerCase()) ? 'selected' : '';
-        orderSelect.innerHTML += `<option value="${o.id}" ${selected}>${o.material_name} (Req: ${o.quantity_requested})</option>`;
-      });
+      if (orderSelect) {
+        orderSelect.innerHTML = '<option value="">-- Auto-Match Orders by Item Name --</option>';
+        const orders = await this.db.getOrders();
+        const pendings = orders.filter(o => o.status === 'Pending');
+
+        const grouped = {};
+        pendings.forEach(o => {
+          const k = o.order_group_id ? o.order_group_id : (o.vendor_name ? `Vendor: ${o.vendor_name}` : 'Pending');
+          if (!grouped[k]) grouped[k] = [];
+          grouped[k].push(o);
+        });
+
+        Object.keys(grouped).forEach(k => {
+          const grp = grouped[k];
+          const v = grp[0] ? (grp[0].vendor_name || 'Vendor') : 'Vendor';
+          orderSelect.innerHTML += `<option value="${k}">PO: ${k} • ${v} (${grp.length} items)</option>`;
+        });
+      }
 
       await this.renderVerifyInwardTable();
       this.openModal('modal-verify-inward');
@@ -1195,12 +1339,45 @@ class MFPMobilePortal {
     }
   }
 
+  toggleInvoicePhotoPreview() {
+    const wrapper = document.getElementById('vi-image-wrapper');
+    const btn = document.getElementById('vi-photo-toggle-btn');
+    if (!wrapper) return;
+    if (wrapper.style.display === 'none') {
+      wrapper.style.display = 'block';
+      if (btn) btn.textContent = 'Collapse';
+    } else {
+      wrapper.style.display = 'none';
+      if (btn) btn.textContent = 'Show Photo';
+    }
+  }
+
+  async applyOrderGroupToVerifyModal(groupId) {
+    if (!groupId) return;
+    const orders = await this.db.getOrders();
+    const grpOrders = orders.filter(o => o.status === 'Pending' && (o.order_group_id === groupId || o.vendor_name === groupId));
+    if (grpOrders.length === 0) return;
+
+    this.currentVerifyInwardItems.forEach((item, idx) => {
+      const match = grpOrders.find(o => o.material_id === item.material_id) || grpOrders[idx];
+      if (match) {
+        item.linked_order_id = match.id;
+        if (!item.material_id && match.material_id) item.material_id = match.material_id;
+        if (match.vendor_name) item.supplier = match.vendor_name;
+      }
+    });
+
+    await this.renderVerifyInwardTable();
+  }
+
   async renderVerifyInwardTable() {
     const tbody = document.getElementById('verify-inward-rows');
     if (!tbody) return;
     tbody.innerHTML = '';
 
     const materials = await this.db.getRawMaterials();
+    const orders = await this.db.getOrders();
+    const pendingOrders = orders.filter(o => o.status === 'Pending');
 
     this.currentVerifyInwardItems.forEach((item, index) => {
       const tr = document.createElement('tr');
@@ -1213,6 +1390,37 @@ class MFPMobilePortal {
         matOptions += `<option value="${m.id}" ${selected}>${m.name} (${m.code})</option>`;
       });
 
+      // Construct individual order options for this specific line item
+      let orderOptions = '<option value="">-- No Link (Direct Inward) --</option>';
+      if (pendingOrders.length > 0) {
+        // Auto-match order by material or text if not already linked
+        if (!item.linked_order_id) {
+          const autoMatched = pendingOrders.find(o => 
+            (item.material_id && o.material_id === item.material_id) ||
+            (item.raw_text_name && o.material_name && item.raw_text_name.toLowerCase().includes(o.material_name.toLowerCase()))
+          );
+          if (autoMatched) {
+            item.linked_order_id = autoMatched.id;
+          }
+        }
+
+        const grouped = {};
+        pendingOrders.forEach(o => {
+          const k = o.order_group_id ? `PO: ${o.order_group_id} • ${o.vendor_name || 'Vendor'}` : (o.vendor_name ? `Vendor: ${o.vendor_name}` : 'Pending Orders');
+          if (!grouped[k]) grouped[k] = [];
+          grouped[k].push(o);
+        });
+
+        Object.keys(grouped).forEach(k => {
+          orderOptions += `<optgroup label="📋 ${k}">`;
+          grouped[k].forEach(o => {
+            const isSel = item.linked_order_id === o.id ? 'selected' : '';
+            orderOptions += `<option value="${o.id}" ${isSel}>${o.material_name} (Req: ${o.quantity_requested})</option>`;
+          });
+          orderOptions += `</optgroup>`;
+        });
+      }
+
       const removeBtn = this.currentVerifyInwardItems.length > 1
         ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeVerifyInwardRow(${index})"><i class="fa-solid fa-trash-can"></i></button>`
         : '';
@@ -1222,6 +1430,11 @@ class MFPMobilePortal {
           <div class="td-bold" style="font-size:0.75rem; margin-bottom:0.2rem;">Extracted: "${item.raw_text_name || 'Line Item'}"</div>
           <select class="form-control" style="font-size:0.75rem; padding:0.25rem 0.4rem;" onchange="app.updateVerifyInwardItem(${index}, 'material_id', this.value)">
             ${matOptions}
+          </select>
+        </td>
+        <td>
+          <select class="form-control" style="font-size:0.75rem; padding:0.25rem 0.35rem;" onchange="app.updateVerifyInwardItem(${index}, 'linked_order_id', this.value)">
+            ${orderOptions}
           </select>
         </td>
         <td><input type="number" step="0.001" class="form-control" style="font-size:0.8rem; padding:0.25rem 0.35rem;" value="${item.quantity}" oninput="app.updateVerifyInwardItem(${index}, 'quantity', this.value)"></td>
@@ -1237,6 +1450,7 @@ class MFPMobilePortal {
     this.currentVerifyInwardItems.push({
       raw_text_name: 'Manual Material Line',
       material_id: '',
+      linked_order_id: '',
       quantity: 10,
       rate: 100,
       supplier: (this.currentVerifyInwardItems[0] ? this.currentVerifyInwardItems[0].supplier : '')
@@ -1251,10 +1465,24 @@ class MFPMobilePortal {
     }
   }
 
-  updateVerifyInwardItem(index, key, val) {
+  async updateVerifyInwardItem(index, key, val) {
     if (this.currentVerifyInwardItems[index]) {
       if (key === 'quantity' || key === 'rate') {
         this.currentVerifyInwardItems[index][key] = parseFloat(val) || 0;
+      } else if (key === 'linked_order_id') {
+        this.currentVerifyInwardItems[index].linked_order_id = val;
+        if (val) {
+          const orders = await this.db.getOrders();
+          const ord = orders.find(o => o.id === val);
+          if (ord) {
+            if (ord.material_id && !this.currentVerifyInwardItems[index].material_id) {
+              this.currentVerifyInwardItems[index].material_id = ord.material_id;
+            }
+            if (ord.vendor_name) {
+              this.currentVerifyInwardItems[index].supplier = ord.vendor_name;
+            }
+          }
+        }
       } else {
         this.currentVerifyInwardItems[index][key] = val;
       }
@@ -1265,7 +1493,6 @@ class MFPMobilePortal {
   async commitVerifyInward() {
     const invoiceNo = document.getElementById('vi-invoice').value.trim();
     const inwardDate = (document.getElementById('vi-date') && document.getElementById('vi-date').value) || this.getTodayDate();
-    const linkedOrderId = document.getElementById('vi-linked-order').value;
 
     if (!invoiceNo) {
       alert("Invoice Number is required.");
@@ -1287,8 +1514,8 @@ class MFPMobilePortal {
 
     this.closeModal('modal-verify-inward');
 
-    const formattedItems = this.currentVerifyInwardItems.map((item, idx) => ({
-      linked_order_id: (idx === 0 ? linkedOrderId : ''),
+    const formattedItems = this.currentVerifyInwardItems.map((item) => ({
+      linked_order_id: item.linked_order_id || '',
       material_id: item.material_id,
       quantity: item.quantity,
       rate: item.rate,
