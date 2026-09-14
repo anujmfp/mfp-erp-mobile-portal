@@ -51,30 +51,27 @@
                 <input type="date" class="form-control" id="order-date" required>
               </div>
               <div class="form-group">
-                <label>Vendor / Supplier Name</label>
-                <input type="text" class="form-control" id="order-vendor" placeholder="e.g. Agro Supplies Ltd">
+                <label>Vendor / Supplier Name *</label>
+                <input type="text" class="form-control" id="order-vendor" placeholder="e.g. Agro Supplies Ltd" required>
               </div>
             </div>
 
-            <div class="form-group">
-              <label>Raw Material / Ingredient *</label>
-              <select class="form-control" id="order-material" required>
-                <!-- Loaded dynamically -->
-              </select>
+            <div style="margin-top:0.65rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Order Items / Materials *</label>
+                <span id="order-estimated-total" style="font-size:0.75rem; font-weight:700; color:var(--color-success);">Est. Total: Rs. 0.00</span>
+              </div>
+              
+              <div id="order-items-container">
+                <!-- Dynamically injected item rows -->
+              </div>
+
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.addOrderItemRow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                <i class="fa-solid fa-plus"></i> Add Another Material / Item
+              </button>
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label>Quantity *</label>
-                <input type="number" step="0.001" class="form-control" id="order-qty" placeholder="e.g. 50" required>
-              </div>
-              <div class="form-group">
-                <label>Target Price (Rs.)</label>
-                <input type="number" step="0.01" class="form-control" id="order-price" placeholder="e.g. 180">
-              </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary" style="padding: 0.65rem;">
+            <button type="submit" id="order-submit-btn" class="btn btn-primary" style="padding: 0.65rem; margin-top:0.75rem;">
               <i class="fa-solid fa-paper-plane"></i> Submit Order Request
             </button>
           </form>
@@ -106,86 +103,197 @@
       </section>
 
       <!-- ==========================================
-           2. VIEW: INWARD PURCHASE BILL COMPARATIVE
+           2. VIEW: INWARD & MATERIAL RETURN
            ========================================== -->
       <section id="view-inward" class="app-view">
-        <div class="ui-card">
-          <div class="card-title">
-            <span><i class="fa-solid fa-circle-down"></i> Log Material Inward</span>
+        <!-- Sub-section selector toggle -->
+        <div class="sub-tabs-bar" style="margin-bottom:0.75rem;">
+          <div class="sub-tab-btn active" id="btn-inward-raw" onclick="app.switchInwardSubSection('raw')">
+            <i class="fa-solid fa-truck-ramp-box"></i> Raw Material Inward
           </div>
-          
-          <div class="mobile-dropzone" id="inward-dropzone">
-            <div class="dropzone-icon"><i class="fa-solid fa-file-invoice"></i></div>
-            <div class="dropzone-text">
-              <h3>Upload or Snap Inward Bill</h3>
-              <p>Supports PDF, JPEG, PNG, GIF, BMP, or direct camera photo.</p>
-            </div>
-            <div style="display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap; margin-top:0.65rem;">
-              <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('inward-camera-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
-                <i class="fa-solid fa-camera"></i> Click Photo
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('inward-file-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
-                <i class="fa-solid fa-folder-open"></i> Upload PDF / Image
-              </button>
-            </div>
-            <input type="file" id="inward-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleInwardUpload(this.files[0])">
-            <input type="file" id="inward-file-input" class="hidden" accept=".pdf,image/jpeg,image/png,image/gif,image/bmp,image/webp,.jpg,.jpeg,.png,.gif,.bmp" onchange="app.handleInwardUpload(this.files[0])">
+          <div class="sub-tab-btn" id="btn-inward-return" onclick="app.switchInwardSubSection('return')">
+            <i class="fa-solid fa-rotate-left"></i> Material Returned (Credit Note)
           </div>
-
-          <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
-
-          <form id="inward-manual-form" onsubmit="app.handleManualInwardSubmit(event)">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Bill / Invoice Reference *</label>
-                <input type="text" class="form-control" id="inward-invoice" placeholder="e.g. INV-9034" required>
-              </div>
-              <div class="form-group">
-                <label>Inward Date *</label>
-                <input type="date" class="form-control" id="inward-date" required>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Select Associated Order *</label>
-              <select class="form-control" id="inward-linked-order" onchange="app.autoFillInwardFromOrder()" required>
-                <!-- Loaded dynamically -->
-              </select>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Received Qty *</label>
-                <input type="number" step="0.001" class="form-control" id="inward-qty" placeholder="Actual received weight" required>
-              </div>
-              <div class="form-group">
-                <label>Billed Rate (Rs.) *</label>
-                <input type="number" step="0.01" class="form-control" id="inward-rate" placeholder="Billed unit price" required>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Supplier / Vendor *</label>
-              <input type="text" class="form-control" id="inward-supplier" placeholder="e.g. Grower Fertilizer Corp" required>
-            </div>
-
-            <button type="submit" class="btn btn-primary" style="padding:0.65rem;">
-              <i class="fa-solid fa-check-double"></i> Commit Inward & Verify
-            </button>
-          </form>
         </div>
 
-        <!-- WhatsApp Variance Warning Widget -->
-        <div class="whatsapp-widget hidden" id="inward-wa-widget">
-          <h4 style="color: var(--color-danger);"><i class="fa-brands fa-whatsapp"></i> WhatsApp Variance Alert Compiled</h4>
-          <textarea class="whatsapp-textarea" id="inward-wa-text" readonly style="border-color: rgba(239, 68, 68, 0.2);"></textarea>
-          <div class="whatsapp-actions">
-            <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('inward-wa-text')">
-              <i class="fa-solid fa-copy"></i> Copy Text
-            </button>
-            <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('inward-wa-text')">
-              <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
-            </button>
+        <!-- 2A. SUB-SECTION: RAW MATERIAL INWARD -->
+        <div id="inward-raw-section">
+          <div class="ui-card">
+            <div class="card-title">
+              <span><i class="fa-solid fa-circle-down"></i> Log Material Inward</span>
+            </div>
+            
+            <div class="mobile-dropzone" id="inward-dropzone">
+              <div class="dropzone-icon"><i class="fa-solid fa-file-invoice"></i></div>
+              <div class="dropzone-text">
+                <h3>Upload or Snap Inward Bill</h3>
+                <p>Supports PDF, JPEG, PNG, GIF, BMP, or direct camera photo.</p>
+              </div>
+              <div style="display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap; margin-top:0.65rem;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('inward-camera-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-camera"></i> Click Photo
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('inward-file-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-folder-open"></i> Upload PDF / Image
+                </button>
+              </div>
+              <input type="file" id="inward-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleInwardUpload(this.files[0])">
+              <input type="file" id="inward-file-input" class="hidden" accept=".pdf,image/jpeg,image/png,image/gif,image/bmp,image/webp,.jpg,.jpeg,.png,.gif,.bmp" onchange="app.handleInwardUpload(this.files[0])">
+            </div>
+
+            <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
+
+            <form id="inward-manual-form" onsubmit="app.handleManualInwardSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Bill / Invoice Reference *</label>
+                  <input type="text" class="form-control" id="inward-invoice" placeholder="e.g. INV-9034" required>
+                </div>
+                <div class="form-group">
+                  <label>Inward Date *</label>
+                  <input type="date" class="form-control" id="inward-date" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Supplier / Vendor *</label>
+                <input type="text" class="form-control" id="inward-supplier" placeholder="e.g. Agro Supplies Ltd" required>
+              </div>
+
+              <div style="margin-top:0.65rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                  <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Received Materials (Multiple Items) *</label>
+                  <span id="inward-total-amount" style="font-size:0.75rem; font-weight:700; color:var(--color-success);">Total: Rs. 0.00</span>
+                </div>
+
+                <div id="inward-items-container">
+                  <!-- Dynamically injected inward item rows -->
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addInwardItemRow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                  <i class="fa-solid fa-plus"></i> Add Another Received Material
+                </button>
+              </div>
+
+              <button type="submit" id="inward-submit-btn" class="btn btn-primary" style="padding:0.65rem; margin-top:0.75rem;">
+                <i class="fa-solid fa-check-double"></i> Commit Inward & Verify
+              </button>
+            </form>
+          </div>
+
+          <!-- WhatsApp Variance Warning Widget -->
+          <div class="whatsapp-widget hidden" id="inward-wa-widget">
+            <h4 style="color: var(--color-danger);"><i class="fa-brands fa-whatsapp"></i> WhatsApp Variance Alert Compiled</h4>
+            <textarea class="whatsapp-textarea" id="inward-wa-text" readonly style="border-color: rgba(239, 68, 68, 0.2);"></textarea>
+            <div class="whatsapp-actions">
+              <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('inward-wa-text')">
+                <i class="fa-solid fa-copy"></i> Copy Text
+              </button>
+              <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('inward-wa-text')">
+                <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2B. SUB-SECTION: MATERIAL RETURNED (CREDIT NOTE) -->
+        <div id="inward-return-section" class="hidden">
+          <div class="ui-card">
+            <div class="card-title">
+              <span><i class="fa-solid fa-rotate-left"></i> Customer Return / Credit Note</span>
+            </div>
+
+            <div class="mobile-dropzone" id="return-dropzone">
+              <div class="dropzone-icon" style="color:var(--color-warning);"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+              <div class="dropzone-text">
+                <h3>Upload or Snap Credit Note</h3>
+                <p>Supports Credit Note PDF, photos via camera, or receipt images.</p>
+              </div>
+              <div style="display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap; margin-top:0.65rem;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('return-camera-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-camera"></i> Click Photo
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('return-file-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-folder-open"></i> Upload Credit Note
+                </button>
+              </div>
+              <input type="file" id="return-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleCreditNoteUpload(this.files[0])">
+              <input type="file" id="return-file-input" class="hidden" accept=".pdf,image/jpeg,image/png,image/gif,image/bmp,image/webp,.jpg,.jpeg,.png,.gif,.bmp" onchange="app.handleCreditNoteUpload(this.files[0])">
+            </div>
+
+            <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or enter return manually --</div>
+
+            <form id="return-manual-form" onsubmit="app.handleReturnSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Credit Note / Ref Number *</label>
+                  <input type="text" class="form-control" id="return-credit-note-no" placeholder="e.g. CN-2026-042" required>
+                </div>
+                <div class="form-group">
+                  <label>Return Date *</label>
+                  <input type="date" class="form-control" id="return-date" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Customer / Client Name *</label>
+                  <input type="text" class="form-control" id="return-customer" placeholder="e.g. Krishna Enterprises" required>
+                </div>
+                <div class="form-group">
+                  <label>Reason for Return</label>
+                  <input type="text" class="form-control" id="return-reason" placeholder="e.g. Excess stock / Store return">
+                </div>
+              </div>
+
+              <div style="margin-top:0.65rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                  <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Returned Finished Goods (Multiple SKUs) *</label>
+                  <span id="return-total-qty" style="font-size:0.75rem; font-weight:700; color:var(--color-warning);">0 pcs total</span>
+                </div>
+
+                <div id="return-items-container">
+                  <!-- Dynamically injected return SKU rows -->
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addReturnItemRow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                  <i class="fa-solid fa-plus"></i> Add Another Returned FG SKU
+                </button>
+              </div>
+
+              <div class="alert-strip" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); color: #f59e0b; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.75rem; margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>Returned items will be directly added back into <strong>Finished Goods (FG) Warehouse Stock</strong>.</span>
+              </div>
+
+              <button type="submit" id="return-submit-btn" class="btn btn-primary" style="padding:0.65rem; margin-top:0.75rem; background: #f59e0b; border-color: #d97706;">
+                <i class="fa-solid fa-rotate-left"></i> Restock Finished Goods from Credit Note
+              </button>
+            </form>
+          </div>
+
+          <!-- WhatsApp Return Log Widget -->
+          <div class="whatsapp-widget hidden" id="return-wa-widget">
+            <h4 style="color: #f59e0b;"><i class="fa-brands fa-whatsapp"></i> WhatsApp Return Log Compiled</h4>
+            <textarea class="whatsapp-textarea" id="return-wa-text" readonly style="border-color: rgba(245, 158, 11, 0.3);"></textarea>
+            <div class="whatsapp-actions">
+              <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('return-wa-text')">
+                <i class="fa-solid fa-copy"></i> Copy Text
+              </button>
+              <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('return-wa-text')">
+                <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+              </button>
+            </div>
+          </div>
+
+          <!-- Recent returns list card -->
+          <div class="ui-card" style="margin-top:1rem;">
+            <div class="card-title">
+              <span><i class="fa-solid fa-clock-rotate-left"></i> Recent Finished Goods Returns</span>
+            </div>
+            <div id="return-history-list" style="max-height: 220px; overflow-y:auto; display:flex; flex-direction:column; gap:0.5rem;">
+              <div class="td-muted italic text-center" style="padding:0.75rem;">No material returns logged yet.</div>
+            </div>
           </div>
         </div>
       </section>
@@ -199,45 +307,71 @@
             <span><i class="fa-solid fa-gears"></i> Daily Production Batch</span>
           </div>
 
-          <!-- Sub-tabs for Product Group Categories -->
-          <div class="sub-tabs-bar">
-            <div class="sub-tab-btn active" data-cat="Bottles" onclick="app.switchProductionCategory('Bottles', this)">Bottles</div>
-            <div class="sub-tab-btn" data-cat="Pouches" onclick="app.switchProductionCategory('Pouches', this)">Pouches</div>
-            <div class="sub-tab-btn" data-cat="Sachets" onclick="app.switchProductionCategory('Sachets', this)">Sachet</div>
-            <div class="sub-tab-btn" data-cat="Horeca" onclick="app.switchProductionCategory('Horeca', this)">Horeca</div>
-          </div>
-
           <form id="production-form" onsubmit="app.handleProductionSubmit(event)">
-            <div class="form-group">
-              <label>Select Product SKU *</label>
-              <select class="form-control" id="production-product" onchange="app.updateProductionRecipeChecklist()" required>
-                <!-- Loaded dynamically based on sub-tab -->
-              </select>
-            </div>
-
             <div class="form-row">
               <div class="form-group">
                 <label>Production Date *</label>
                 <input type="date" class="form-control" id="production-date" required>
               </div>
               <div class="form-group">
-                <label>Quantity (pcs) *</label>
-                <input type="number" step="1" min="1" class="form-control" id="production-qty" placeholder="Enter number of pieces" oninput="app.updateProductionRecipeChecklist()" required>
+                <label>Batch / Shift Reference</label>
+                <input type="text" class="form-control" id="production-batch-ref" placeholder="e.g. Day Shift / Batch A">
               </div>
             </div>
 
-            <!-- Material Forecast Cover Checklist -->
-            <div style="background-color:rgba(0,0,0,0.2); padding:0.65rem; border-radius:6px; margin-bottom:1rem; font-size:0.75rem;">
-              <div style="font-weight:bold; color:var(--text-muted); margin-bottom:0.35rem; text-transform:uppercase; font-size:0.65rem;">Raw Materials Cover Cover Checklist</div>
-              <div id="production-checklist" style="display:flex; flex-direction:column; gap:0.25rem;">
-                <span class="td-muted italic">Choose a product to evaluate raw material stock cover.</span>
+            <!-- Sub-tabs for quick category filter when adding SKUs -->
+            <div class="sub-tabs-bar" style="margin-top:0.35rem; margin-bottom:0.5rem;">
+              <div class="sub-tab-btn active" data-cat="All" onclick="app.switchProductionCategory('All', this)">All Categories</div>
+              <div class="sub-tab-btn" data-cat="Bottles" onclick="app.switchProductionCategory('Bottles', this)">Bottles</div>
+              <div class="sub-tab-btn" data-cat="Pouches" onclick="app.switchProductionCategory('Pouches', this)">Pouches</div>
+              <div class="sub-tab-btn" data-cat="Sachets" onclick="app.switchProductionCategory('Sachets', this)">Sachet</div>
+              <div class="sub-tab-btn" data-cat="Horeca" onclick="app.switchProductionCategory('Horeca', this)">Horeca</div>
+            </div>
+
+            <div style="margin-top:0.4rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Finished Goods Produced (Multiple SKUs) *</label>
+                <span id="production-total-qty" style="font-size:0.75rem; font-weight:700; color:var(--color-primary);">0 pcs total</span>
+              </div>
+
+              <div id="production-items-container">
+                <!-- Dynamically injected SKU rows -->
+              </div>
+
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.addProductionSKURow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                <i class="fa-solid fa-plus"></i> Add Another Finished Good SKU
+              </button>
+            </div>
+
+            <!-- Material Forecast Cover Checklist (Aggregated across all SKUs) -->
+            <div style="background-color:rgba(0,0,0,0.25); padding:0.65rem; border-radius:6px; margin-top:0.75rem; margin-bottom:0.75rem; font-size:0.75rem; border:1px solid var(--border-color);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+                <div style="font-weight:bold; color:var(--text-muted); text-transform:uppercase; font-size:0.65rem;"><i class="fa-solid fa-clipboard-check"></i> Aggregated Raw Materials BOM Checklist</div>
+                <span id="production-checklist-status" style="font-size:0.65rem; font-weight:600; color:var(--text-dim);">0 SKUs evaluated</span>
+              </div>
+              <div id="production-checklist" style="display:flex; flex-direction:column; gap:0.35rem; max-height:160px; overflow-y:auto;">
+                <span class="td-muted italic">Add one or more SKUs above to evaluate raw material requirements.</span>
               </div>
             </div>
 
-            <button type="submit" class="btn btn-primary" style="padding:0.65rem;">
+            <button type="submit" id="production-submit-btn" class="btn btn-primary" style="padding:0.65rem;">
               <i class="fa-solid fa-gears"></i> Record Daily Batch
             </button>
           </form>
+        </div>
+
+        <!-- WhatsApp Production Run Summary Widget -->
+        <div class="whatsapp-widget hidden" id="production-wa-widget">
+          <h4><i class="fa-brands fa-whatsapp"></i> Daily Production Batch Compiled</h4>
+          <textarea class="whatsapp-textarea" id="production-wa-text" readonly></textarea>
+          <div class="whatsapp-actions">
+            <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('production-wa-text')">
+              <i class="fa-solid fa-copy"></i> Copy Text
+            </button>
+            <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('production-wa-text')">
+              <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+            </button>
+          </div>
         </div>
 
         <!-- Dynamic Stock Balance status card -->
@@ -263,13 +397,13 @@
           <div class="mobile-dropzone" id="outward-dropzone">
             <div class="dropzone-icon"><i class="fa-solid fa-file-invoice"></i></div>
             <div class="dropzone-text">
-              <h3>Upload Sales Invoice PDF</h3>
-              <p>Automatically extracts dispatches and updates Finished Goods warehouse.</p>
+              <h3>Upload Sales Invoice PDF(s)</h3>
+              <p>Supports single or multi-PDF batch upload. Auto-extracts dispatches & deducts FG stock.</p>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('outward-file-input').click()" style="margin-top:0.5rem; padding: 0.35rem 0.65rem;">
-              Browse Invoice
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('outward-file-input').click()" style="margin-top:0.5rem; padding: 0.35rem 0.65rem;">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Browse Invoices (Single / Batch)
             </button>
-            <input type="file" id="outward-file-input" class="hidden" accept=".pdf" onchange="app.handleOutwardUpload(this.files[0])">
+            <input type="file" id="outward-file-input" class="hidden" accept=".pdf" multiple onchange="app.handleOutwardUploadMultiple(this.files)">
           </div>
 
           <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
@@ -428,10 +562,11 @@
           <table class="verify-table">
             <thead>
               <tr>
-                <th>Extracted Material Code *</th>
-                <th>Qty *</th>
-                <th>Rate (Rs.) *</th>
+                <th>Material Code / SKU *</th>
+                <th style="width:70px;">Qty *</th>
+                <th style="width:75px;">Rate (Rs.) *</th>
                 <th>Supplier *</th>
+                <th style="width:40px;"></th>
               </tr>
             </thead>
             <tbody id="verify-inward-rows">
@@ -439,6 +574,9 @@
             </tbody>
           </table>
         </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="app.addVerifyInwardRow()" style="margin-top:0.35rem; width:100%; border-style:dashed; font-size:0.75rem; padding:0.35rem;">
+          <i class="fa-solid fa-plus"></i> Add Another Material Line
+        </button>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modal-verify-inward')">Cancel</button>
@@ -449,34 +587,55 @@
 
   <!-- C. SALES INVOICE EXTRACTED DISPATCH REVIEW MODAL -->
   <div class="modal-overlay" id="modal-verify-outward">
-    <div class="modal-content">
+    <div class="modal-content" style="max-height: 92vh; display: flex; flex-direction: column;">
       <div class="modal-header">
-        <h2>Review Outward Sales Dispatch</h2>
+        <h2 id="vo-modal-title">Review Outward Sales Dispatch</h2>
         <button class="modal-close" onclick="app.closeModal('modal-verify-outward')">&times;</button>
       </div>
-      <div class="modal-body">
+
+      <!-- Batch Navigation Bar (visible when multiple PDFs uploaded) -->
+      <div id="vo-batch-nav" style="display:none; padding: 0.5rem 0.8rem; background: rgba(56,189,248,0.08); border-bottom: 1px solid var(--border-color); flex-direction: column; gap: 0.4rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span id="vo-batch-badge" style="font-size:0.75rem; font-weight:700; color:var(--info);"><i class="fa-solid fa-layer-group"></i> Batch Mode</span>
+          <button type="button" id="vo-commit-all-btn" class="btn btn-primary btn-sm" onclick="app.commitAllBatchOutward()" style="padding:0.25rem 0.6rem; font-size:0.75rem;">
+            <i class="fa-solid fa-check-double"></i> Commit All Invoices
+          </button>
+        </div>
+        <div id="vo-batch-tabs" style="display:flex; gap:0.35rem; overflow-x:auto; padding-bottom:0.2rem;">
+          <!-- Invoices tabs dynamically inserted -->
+        </div>
+      </div>
+
+      <div class="modal-body" style="overflow-y: auto;">
         <div class="form-row">
           <div class="form-group">
             <label>Sales Invoice Number *</label>
-            <input type="text" class="form-control" id="vo-invoice">
+            <input type="text" class="form-control" id="vo-invoice" onchange="app.updateActiveBatchOutwardHeader('invoice_no', this.value)">
           </div>
           <div class="form-group">
             <label>Dispatch Date *</label>
-            <input type="date" class="form-control" id="vo-date">
+            <input type="date" class="form-control" id="vo-date" onchange="app.updateActiveBatchOutwardHeader('date', this.value)">
           </div>
         </div>
         <div class="form-group">
-          <label>Customer Name *</label>
-          <input type="text" class="form-control" id="vo-customer">
+          <label>Customer / Buyer Name *</label>
+          <input type="text" class="form-control" id="vo-customer" onchange="app.updateActiveBatchOutwardHeader('customer', this.value)">
         </div>
 
-        <div class="table-container" style="margin-top:0.5rem; max-height:220px; border:1px solid var(--border-color); border-radius:6px;">
+        <div id="vo-summary-strip" style="display:flex; justify-content:space-between; align-items:center; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 6px; padding: 0.45rem 0.75rem; margin-bottom: 0.5rem; font-size: 0.8rem;">
+          <span id="vo-net-amount" style="font-weight:700; color:var(--success);"><i class="fa-solid fa-receipt"></i> Net Amount: Rs. 0.00</span>
+          <span id="vo-item-count" style="color:var(--text-muted); font-size:0.75rem;">0 items</span>
+        </div>
+
+        <div class="table-container" style="margin-top:0.25rem; max-height:240px; border:1px solid var(--border-color); border-radius:6px; overflow-x:auto;">
           <table class="verify-table">
             <thead>
               <tr>
-                <th>Finished Good SKU *</th>
-                <th>Qty Shipped *</th>
-                <th>Selling Price *</th>
+                <th style="min-width:140px;">Finished Good SKU *</th>
+                <th style="width:65px;">Qty *</th>
+                <th style="width:75px;">Rate (Rs.)</th>
+                <th style="width:65px;">Disc.</th>
+                <th style="width:75px;">Total</th>
               </tr>
             </thead>
             <tbody id="verify-outward-rows">
@@ -485,9 +644,16 @@
           </table>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="app.closeModal('modal-verify-outward')">Cancel</button>
-        <button class="btn btn-primary" onclick="app.commitVerifyOutward()" style="width:auto;">Commit Shipped Goods</button>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <div>
+          <button type="button" id="vo-discard-btn" class="btn btn-danger-sm btn-sm" onclick="app.discardActiveOutwardBatch()" style="display:none; font-size:0.75rem;">
+            <i class="fa-solid fa-trash-can"></i> Discard Invoice
+          </button>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-verify-outward')">Close</button>
+          <button type="button" class="btn btn-primary" onclick="app.commitVerifyOutward()" style="width:auto;">Confirm & Dispatch</button>
+        </div>
       </div>
     </div>
   </div>

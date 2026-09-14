@@ -641,3 +641,56 @@ select.form-control option {
   flex-direction: column;
   gap: 0.85rem;
 }
+
+/* Multi-Item Row Component */
+.multi-item-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.65rem;
+  margin-bottom: 0.5rem;
+  position: relative;
+  transition: border-color 0.15s ease;
+}
+
+.multi-item-box:hover {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.multi-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.multi-item-remove-btn {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 4px;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: all 0.15s ease;
+}
+
+.multi-item-remove-btn:hover {
+  background: var(--color-danger);
+  color: white;
+}
+
+.multi-item-box.return-box {
+  border-left: 3px solid #f59e0b;
+}
+
+.multi-item-box.return-box:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+

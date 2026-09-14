@@ -15,7 +15,8 @@ class DBClient {
       orders: [],
       inwards: [],
       productions: [],
-      outwards: []
+      outwards: [],
+      returns: []
     };
     
     this.seedingInProgress = false;
@@ -63,6 +64,9 @@ class DBClient {
       } catch (e) {
         console.error("Failed to load local DB", e);
       }
+    }
+    if (!this.offlineDb.returns) {
+      this.offlineDb.returns = [];
     }
 
     // Auto-seed sandbox items if database is empty on first boot
@@ -341,6 +345,58 @@ class DBClient {
     return outward;
   }
 
+  async getReturns() {
+    if (!this.offlineDb.returns) this.offlineDb.returns = [];
+    return [...this.offlineDb.returns].sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+  }
+
+  async insertMaterialReturn(returnData) {
+    returnData.id = 'ret_' + Date.now();
+    const dateStr = returnData.date || new Date().toISOString().split('T')[0];
+    returnData.date = dateStr;
+    returnData.created_at = new Date(dateStr + 'T12:00:00Z').toISOString();
+
+    const products = await this.getProducts();
+    if (!this.offlineDb.returns) this.offlineDb.returns = [];
+
+    // 1. Add returned quantities back to Finished Goods inventory
+    for (const item of returnData.items) {
+      const prod = products.find(p => p.id === item.product_id);
+      if (prod) {
+        const currentStock = parseFloat(prod.current_stock || 0);
+        const returnQty = parseFloat(item.quantity || 0);
+        const newStock = currentStock + returnQty;
+        await this.updateProductStock(prod.id, newStock);
+
+        // Also record line into Supabase 'inwards' table if online
+        if (this.config.isOnline && this.supabase) {
+          try {
+            const payload = {
+              id: 'ret_inw_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              created_at: returnData.created_at,
+              invoice_no: returnData.credit_note_no,
+              material_id: prod.id,
+              material_name: `[Return FG] ${prod.name}`,
+              quantity_received: returnQty,
+              rate_billed: parseFloat(item.rate || prod.selling_price || 0),
+              supplier: returnData.customer,
+              linked_order_id: null,
+              has_variance: false,
+              variance_notes: `Mfd Date: ${item.mfg_date || 'N/A'}${item.batch_no ? ', Batch: ' + item.batch_no : ''}${returnData.reason ? ', Reason: ' + returnData.reason : ''}`
+            };
+            await this.supabase.from('inwards').insert([payload]);
+          } catch (err) {
+            console.error("Error logging return line to Supabase inwards table:", err);
+          }
+        }
+      }
+    }
+
+    this.offlineDb.returns.push(returnData);
+    this.saveOfflineDb();
+    return returnData;
+  }
+
   async updateMaterialStock(id, newStock, newRate) {
     if (this.config.isOnline && this.supabase) {
       const { error } = await this.supabase.from('raw_materials')
@@ -429,7 +485,17 @@ class DBClient {
           { material_id: 'rm_rose', quantity: 0.015, wastage_percentage: 1.0 },
           { material_id: 'rm_carton_box', quantity: 1.0, wastage_percentage: 0.0 }
         ]
-      }
+      },
+      { id: 'fg_or_pz_10g', code: 'FG-OR-PZ-10G', name: 'truFLAVR Oregano Pizza Seasoning 10 gms Pouch', price: 5.79, selling_price: 5.79, current_stock: 5000, min_stock: 500, packaging_type: 'Pouches', bom: [] },
+      { id: 'fg_cf_10g', code: 'FG-CF-10G', name: 'truFLAVR Chilli Flakes 10 gms Pouch', price: 5.79, selling_price: 5.79, current_stock: 5000, min_stock: 500, packaging_type: 'Pouches', bom: [] },
+      { id: 'fg_cf_45g', code: 'FG-CF-45G', name: 'truFLAVR Chilli Flakes 45 gms Bottle', price: 63.64, selling_price: 63.64, current_stock: 500, min_stock: 50, packaging_type: 'Bottles', bom: [] },
+      { id: 'fg_or_25g', code: 'FG-OR-25G', name: 'truFLAVR Oregano 25 gms Bottle', price: 57.28, selling_price: 57.28, current_stock: 500, min_stock: 50, packaging_type: 'Bottles', bom: [] },
+      { id: 'fg_is_40g', code: 'FG-IS-40G', name: 'truFLAVR Italian Seasoning 40 gms Bottle', price: 63.64, selling_price: 63.64, current_stock: 500, min_stock: 50, packaging_type: 'Bottles', bom: [] },
+      { id: 'fg_pp_50g', code: 'FG-PP-50G', name: 'truFLAVR Peri Peri 50 gms Bottle', price: 57.28, selling_price: 57.28, current_stock: 500, min_stock: 50, packaging_type: 'Bottles', bom: [] },
+      { id: 'fg_cpp_50g', code: 'FG-CPP-50G', name: 'truFLAVR Cheese Peri Peri 50 gms Bottle', price: 57.28, selling_price: 57.28, current_stock: 500, min_stock: 50, packaging_type: 'Bottles', bom: [] },
+      { id: 'fg_bs_10g', code: 'FG-BS-10G', name: 'truFLAVR Bombay Sandwich 10 gms Pouch', price: 5.79, selling_price: 5.79, current_stock: 2000, min_stock: 200, packaging_type: 'Pouches', bom: [] },
+      { id: 'fg_im_10g', code: 'FG-IM-10G', name: 'truFLAVR Italian Mix 10 gms Pouch', price: 5.79, selling_price: 5.79, current_stock: 2000, min_stock: 200, packaging_type: 'Pouches', bom: [] },
+      { id: 'fg_pp_10g', code: 'FG-PP-10G', name: 'truFLAVR Peri Peri 10 gms Pouch', price: 5.79, selling_price: 5.79, current_stock: 2000, min_stock: 200, packaging_type: 'Pouches', bom: [] }
     ];
 
     this.saveOfflineDb();
@@ -457,9 +523,18 @@ class DBClient {
 class MFPMobilePortal {
   constructor() {
     this.db = new DBClient();
-    this.currentProductionCategory = 'Bottles'; // Active subtab
-    this.currentVerifyInwardItem = null;
+    this.currentProductionCategory = 'All'; // Active subtab
+    this.currentVerifyInwardItems = [];
     this.currentVerifyOutwardItems = [];
+    this.batchOutwardInvoices = [];
+    this.activeBatchOutwardIdx = 0;
+
+    // Multi-item dynamic states
+    this.orderItems = [];
+    this.inwardItems = [];
+    this.productionItems = [];
+    this.returnItems = [];
+    this.inwardActiveSubTab = 'raw';
 
     this.init();
   }
@@ -472,15 +547,70 @@ class MFPMobilePortal {
     return `${year}-${month}-${day}`;
   }
 
+  formatDateToISO(dStr) {
+    if (!dStr) return this.getTodayDate();
+    const cleaned = dStr.trim().replace(/[/.]/g, '-');
+    const parts = cleaned.split('-');
+    if (parts.length === 3) {
+      // If DD-MM-YYYY (e.g. 07-09-2026)
+      if (parts[0].length <= 2 && parts[2].length === 4) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+      // If YYYY-MM-DD
+      if (parts[0].length === 4 && parts[1].length <= 2 && parts[2].length <= 2) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+    }
+    const parsed = Date.parse(dStr);
+    if (!isNaN(parsed)) {
+      return new Date(parsed).toISOString().split('T')[0];
+    }
+    return this.getTodayDate();
+  }
+
   initDateInputs() {
     const today = this.getTodayDate();
-    const dateInputIds = ['order-date', 'inward-date', 'production-date', 'outward-date', 'vi-date', 'vo-date'];
+    const dateInputIds = ['order-date', 'inward-date', 'return-date', 'production-date', 'outward-date', 'vi-date', 'vo-date'];
     dateInputIds.forEach(id => {
       const el = document.getElementById(id);
       if (el && !el.value) {
         el.value = today;
       }
     });
+  }
+
+  setupDropzones() {
+    const setup = (dropId, inputId, callback) => {
+      const dropzone = document.getElementById(dropId);
+      if (!dropzone) return;
+
+      ['dragenter', 'dragover'].forEach(name => {
+        dropzone.addEventListener(name, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(name => {
+        dropzone.addEventListener(name, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('dragover');
+        });
+      });
+
+      dropzone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        if (dt && dt.files && dt.files.length > 0) {
+          callback(dt.files);
+        }
+      });
+    };
+
+    setup('inward-dropzone', 'inward-file-input', (files) => this.handleInwardUpload(files[0]));
+    setup('return-dropzone', 'return-file-input', (files) => this.handleCreditNoteUpload(files[0]));
+    setup('outward-dropzone', 'outward-file-input', (files) => this.handleOutwardUploadMultiple(files));
   }
 
   async init() {
@@ -493,6 +623,7 @@ class MFPMobilePortal {
     });
 
     this.initDateInputs();
+    this.setupDropzones();
     this.loadSettingsForm();
     await this.refreshAllViews();
   }
@@ -531,112 +662,443 @@ class MFPMobilePortal {
     await this.renderOutwardPane();
   }
 
-  // --- 1. ORDER REQUEST WORKFLOW ---
+  // --- 1. ORDER REQUEST WORKFLOW (MULTI-ITEM) ---
   
   async renderOrderPane() {
-    const materials = await this.db.getRawMaterials();
-    const select = document.getElementById('order-material');
-    if (!select) return;
-
-    select.innerHTML = '<option value="" disabled selected>-- Select Material --</option>';
-    materials.forEach(m => {
-      select.innerHTML += `<option value="${m.id}">${m.name} (${m.code})</option>`;
-    });
-
     // Populate Outstanding Orders
     const orders = await this.db.getOrders();
     const container = document.getElementById('order-list-container');
-    container.innerHTML = '';
-
-    const pendings = orders.filter(o => o.status === 'Pending');
-    if (pendings.length === 0) {
-      container.innerHTML = `<div class="td-muted italic text-center style="padding:1rem;">No pending purchase orders.</div>`;
-      return;
+    if (container) {
+      container.innerHTML = '';
+      const pendings = orders.filter(o => o.status === 'Pending');
+      if (pendings.length === 0) {
+        container.innerHTML = `<div class="td-muted italic text-center" style="padding:1rem;">No pending purchase orders.</div>`;
+      } else {
+        pendings.forEach(ord => {
+          const div = document.createElement('div');
+          div.className = 'stock-cover-item';
+          const dateDisplay = ord.date || (ord.created_at ? ord.created_at.split('T')[0] : 'N/A');
+          div.innerHTML = `
+            <div>
+              <div class="td-bold" style="font-size:0.85rem;">${ord.material_name}</div>
+              <div class="td-muted" style="font-size:0.75rem;">Date: ${dateDisplay} • Qty: ${ord.quantity_requested} • Vendor: ${ord.vendor_name || 'N/A'}</div>
+            </div>
+            <span class="badge badge-warning" style="font-size:0.65rem;">Pending</span>
+          `;
+          container.appendChild(div);
+        });
+      }
     }
 
-    pendings.forEach(ord => {
-      const div = document.createElement('div');
-      div.className = 'stock-cover-item';
-      const dateDisplay = ord.date || (ord.created_at ? ord.created_at.split('T')[0] : 'N/A');
-      div.innerHTML = `
-        <div>
-          <div class="td-bold" style="font-size:0.85rem;">${ord.material_name}</div>
-          <div class="td-muted" style="font-size:0.75rem;">Date: ${dateDisplay} • Qty: ${ord.quantity_requested} • Vendor: ${ord.vendor_name || 'N/A'}</div>
-        </div>
-        <span class="badge badge-warning" style="font-size:0.65rem;">Pending</span>
-      `;
-      container.appendChild(div);
+    if (!this.orderItems || this.orderItems.length === 0) {
+      this.orderItems = [{ material_id: '', quantity: 50, target_price: 0 }];
+    }
+    await this.renderOrderItems();
+  }
+
+  addOrderItemRow() {
+    this.orderItems.push({ material_id: '', quantity: 10, target_price: 0 });
+    this.renderOrderItems();
+  }
+
+  removeOrderItemRow(index) {
+    if (this.orderItems.length > 1) {
+      this.orderItems.splice(index, 1);
+      this.renderOrderItems();
+    }
+  }
+
+  async updateOrderItem(index, field, val) {
+    if (!this.orderItems[index]) return;
+
+    if (field === 'material_id') {
+      this.orderItems[index].material_id = val;
+      const materials = await this.db.getRawMaterials();
+      const mat = materials.find(m => m.id === val);
+      if (mat && (!this.orderItems[index].target_price || this.orderItems[index].target_price === 0)) {
+        this.orderItems[index].target_price = mat.average_price || 0;
+        const priceInput = document.getElementById(`order-item-price-${index}`);
+        if (priceInput) priceInput.value = this.orderItems[index].target_price;
+      }
+      const unitEl = document.getElementById(`order-item-unit-${index}`);
+      if (unitEl && mat) unitEl.textContent = mat.unit;
+    } else if (field === 'quantity') {
+      this.orderItems[index].quantity = parseFloat(val) || 0;
+    } else if (field === 'target_price') {
+      this.orderItems[index].target_price = parseFloat(val) || 0;
+    }
+
+    // Update row total
+    const qty = this.orderItems[index].quantity || 0;
+    const price = this.orderItems[index].target_price || 0;
+    const subtotalEl = document.getElementById(`order-item-subtotal-${index}`);
+    if (subtotalEl) {
+      subtotalEl.textContent = `Rs. ${(qty * price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    }
+
+    this.calculateOrderEstimatedTotal();
+  }
+
+  calculateOrderEstimatedTotal() {
+    let total = 0;
+    this.orderItems.forEach(item => {
+      total += (item.quantity || 0) * (item.target_price || 0);
     });
+    const badge = document.getElementById('order-estimated-total');
+    if (badge) {
+      badge.textContent = `Est. Total: Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    }
+  }
+
+  async renderOrderItems() {
+    const container = document.getElementById('order-items-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const materials = await this.db.getRawMaterials();
+
+    this.orderItems.forEach((item, index) => {
+      const box = document.createElement('div');
+      box.className = 'multi-item-box';
+
+      const selectedMat = materials.find(m => m.id === item.material_id);
+      const unit = selectedMat ? selectedMat.unit : 'unit';
+      const subtotal = (item.quantity || 0) * (item.target_price || 0);
+
+      let matOptions = '<option value="" disabled selected>-- Select Material / Ingredient --</option>';
+      materials.forEach(m => {
+        const isSel = m.id === item.material_id ? 'selected' : '';
+        matOptions += `<option value="${m.id}" ${isSel}>${m.name} (${m.code}) - ${m.unit}</option>`;
+      });
+
+      const removeBtnHtml = this.orderItems.length > 1
+        ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeOrderItemRow(${index})"><i class="fa-solid fa-trash-can"></i> Remove</button>`
+        : '';
+
+      box.innerHTML = `
+        <div class="multi-item-header">
+          <span><i class="fa-solid fa-hashtag"></i> Item #${index + 1}</span>
+          ${removeBtnHtml}
+        </div>
+        <div class="form-group" style="margin-bottom:0.45rem;">
+          <select class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateOrderItem(${index}, 'material_id', this.value)" required>
+            ${matOptions}
+          </select>
+        </div>
+        <div class="form-row" style="margin-bottom:0.25rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Qty (<span id="order-item-unit-${index}">${unit}</span>) *</label>
+            <input type="number" step="0.001" min="0.001" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.quantity || ''}" placeholder="e.g. 50" oninput="app.updateOrderItem(${index}, 'quantity', this.value)" required>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Target Rate (Rs.)</label>
+            <input type="number" step="0.01" min="0" id="order-item-price-${index}" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.target_price || ''}" placeholder="Rs./unit" oninput="app.updateOrderItem(${index}, 'target_price', this.value)">
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">
+          Subtotal: <strong id="order-item-subtotal-${index}" style="margin-left:0.35rem; color:var(--text-color);">Rs. ${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+        </div>
+      `;
+      container.appendChild(box);
+    });
+
+    this.calculateOrderEstimatedTotal();
+
+    const submitBtn = document.getElementById('order-submit-btn');
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Submit Order Request (${this.orderItems.length} Item${this.orderItems.length > 1 ? 's' : ''})`;
+    }
   }
 
   async handleOrderSubmit(e) {
     e.preventDefault();
 
     const orderDate = (document.getElementById('order-date') && document.getElementById('order-date').value) || this.getTodayDate();
-    const matId = document.getElementById('order-material').value;
-    const qty = parseFloat(document.getElementById('order-qty').value) || 0;
-    const price = parseFloat(document.getElementById('order-price').value) || 0;
-    const vendor = document.getElementById('order-vendor').value.trim();
+    const vendor = (document.getElementById('order-vendor') ? document.getElementById('order-vendor').value.trim() : '');
 
-    if (!matId || qty <= 0) return;
+    if (!vendor) {
+      alert("Vendor / Supplier Name is required.");
+      return;
+    }
+
+    if (!this.orderItems || this.orderItems.length === 0) {
+      alert("Please add at least one item to the order.");
+      return;
+    }
+
+    // Validate all items
+    for (let i = 0; i < this.orderItems.length; i++) {
+      const it = this.orderItems[i];
+      if (!it.material_id) {
+        alert(`Please select a raw material for Item #${i + 1}.`);
+        return;
+      }
+      if (!it.quantity || it.quantity <= 0) {
+        alert(`Please specify a valid quantity for Item #${i + 1}.`);
+        return;
+      }
+    }
 
     const materials = await this.db.getRawMaterials();
-    const mat = materials.find(m => m.id === matId);
-    if (!mat) return;
+    const orderGroupId = 'PO-' + Date.now().toString().slice(-6);
 
-    const order = await this.db.insertOrder({
-      date: orderDate,
-      material_id: matId,
-      material_name: mat.name,
-      quantity_requested: qty,
-      vendor_name: vendor || '',
-      price_suggested: price || 0
-    });
+    let totalEst = 0;
+    let itemsTextList = '';
 
-    // Compile WhatsApp order request with Date
+    for (let i = 0; i < this.orderItems.length; i++) {
+      const it = this.orderItems[i];
+      const mat = materials.find(m => m.id === it.material_id);
+      const matName = mat ? mat.name : 'Raw Material';
+      const matCode = mat ? mat.code : '';
+      const unit = mat ? mat.unit : 'units';
+      const price = it.target_price || 0;
+      const subtotal = (it.quantity || 0) * price;
+      totalEst += subtotal;
+
+      await this.db.insertOrder({
+        date: orderDate,
+        order_group_id: orderGroupId,
+        material_id: it.material_id,
+        material_name: matName,
+        quantity_requested: it.quantity,
+        vendor_name: vendor,
+        price_suggested: price
+      });
+
+      itemsTextList += `${i + 1}. *${matName}* (${matCode})\n` +
+                       `   • *Qty:* ${it.quantity} ${unit}` +
+                       (price > 0 ? ` • *Target Rate:* Rs. ${price.toFixed(2)} / ${unit} (Rs. ${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })})` : '') +
+                       `\n`;
+    }
+
+    // Compile Multi-Item WhatsApp order request
     const waText = `📦 *MFP ERP - Purchase Order Request*\n` +
                    `• *Date:* ${orderDate}\n` +
-                   `• *Material:* ${mat.name} (${mat.code})\n` +
-                   `• *Quantity Needed:* ${qty} ${mat.unit}\n` +
-                   (vendor ? `• *Suggested Vendor:* ${vendor}\n` : '') +
-                   (price ? `• *Estimated Price:* Rs. ${price.toFixed(2)} / ${mat.unit}\n` : '') +
-                   `\n_Please order the above raw material. Submitted by Mobile Console._`;
+                   `• *Supplier / Vendor:* ${vendor}\n` +
+                   `• *Order Reference:* ${orderGroupId}\n\n` +
+                   `*Materials Ordered (${this.orderItems.length} Items):*\n` +
+                   itemsTextList +
+                   `\n*Total Estimated Value:* Rs. ${totalEst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+                   `\n_Please confirm order acceptance and expected delivery schedule. Submitted via MFP Mobile Console._`;
 
     document.getElementById('order-wa-text').value = waText;
     document.getElementById('order-wa-widget').classList.remove('hidden');
 
+    const prevCount = this.orderItems.length;
     document.getElementById('order-form').reset();
+    this.orderItems = [{ material_id: '', quantity: 50, target_price: 0 }];
     this.initDateInputs();
     await this.renderOrderPane();
+    alert(`Purchase Order Request ${orderGroupId} submitted for ${prevCount} item(s)! WhatsApp message compiled.`);
   }
 
 
-  // --- 2. INWARD PURCHASE BILL RECONCILIATION WORKFLOW ---
+  // --- 2. INWARD PURCHASE BILL RECONCILIATION WORKFLOW (MULTI-ITEM) ---
 
   async renderInwardPane() {
-    // Populate outstanding order references dropdown
-    const orders = await this.db.getOrders();
-    const select = document.getElementById('inward-linked-order');
-    if (!select) return;
-
-    select.innerHTML = '<option value="" disabled selected>-- Select Associated Order Reference --</option>';
-    const pendingOrders = orders.filter(o => o.status === 'Pending');
-    
-    pendingOrders.forEach(o => {
-      select.innerHTML += `<option value="${o.id}">${o.material_name} (Req: ${o.quantity_requested} pcs) - ID: ${o.id.substring(4, 9)}</option>`;
-    });
+    if (this.inwardActiveSubTab === 'return') {
+      await this.renderReturnPane();
+    } else {
+      if (!this.inwardItems || this.inwardItems.length === 0) {
+        this.inwardItems = [{ linked_order_id: '', material_id: '', quantity: 50, rate: 0 }];
+      }
+      await this.renderInwardItems();
+    }
   }
 
-  async autoFillInwardFromOrder() {
-    const orderId = document.getElementById('inward-linked-order').value;
-    const orders = await this.db.getOrders();
-    const ord = orders.find(o => o.id === orderId);
+  addInwardItemRow() {
+    this.inwardItems.push({ linked_order_id: '', material_id: '', quantity: 10, rate: 0 });
+    this.renderInwardItems();
+  }
 
-    if (ord) {
-      document.getElementById('inward-qty').value = ord.quantity_requested;
-      document.getElementById('inward-rate').value = ord.price_suggested || 0;
-      document.getElementById('inward-supplier').value = ord.vendor_name || '';
+  removeInwardItemRow(index) {
+    if (this.inwardItems.length > 1) {
+      this.inwardItems.splice(index, 1);
+      this.renderInwardItems();
     }
+  }
+
+  async updateInwardItem(index, field, val) {
+    if (!this.inwardItems[index]) return;
+
+    if (field === 'select_source') {
+      const orders = await this.db.getOrders();
+      const materials = await this.db.getRawMaterials();
+
+      if (val.startsWith('ord_')) {
+        const ord = orders.find(o => o.id === val);
+        if (ord) {
+          this.inwardItems[index].linked_order_id = ord.id;
+          this.inwardItems[index].material_id = ord.material_id;
+          this.inwardItems[index].quantity = parseFloat(ord.quantity_requested) || 1;
+          this.inwardItems[index].rate = parseFloat(ord.price_suggested) || 0;
+
+          // Auto-fill supplier if currently empty
+          const suppInput = document.getElementById('inward-supplier');
+          if (suppInput && !suppInput.value && ord.vendor_name) {
+            suppInput.value = ord.vendor_name;
+          }
+
+          const qtyInput = document.getElementById(`inward-item-qty-${index}`);
+          if (qtyInput) qtyInput.value = this.inwardItems[index].quantity;
+          const rateInput = document.getElementById(`inward-item-rate-${index}`);
+          if (rateInput) rateInput.value = this.inwardItems[index].rate;
+        }
+      } else if (val.startsWith('mat_')) {
+        const matId = val.replace('mat_', '');
+        const mat = materials.find(m => m.id === matId);
+        if (mat) {
+          this.inwardItems[index].linked_order_id = '';
+          this.inwardItems[index].material_id = mat.id;
+          if (!this.inwardItems[index].rate || this.inwardItems[index].rate === 0) {
+            this.inwardItems[index].rate = mat.average_price || 0;
+            const rateInput = document.getElementById(`inward-item-rate-${index}`);
+            if (rateInput) rateInput.value = this.inwardItems[index].rate;
+          }
+        }
+      }
+    } else if (field === 'quantity') {
+      this.inwardItems[index].quantity = parseFloat(val) || 0;
+    } else if (field === 'rate') {
+      this.inwardItems[index].rate = parseFloat(val) || 0;
+    }
+
+    const qty = this.inwardItems[index].quantity || 0;
+    const rate = this.inwardItems[index].rate || 0;
+    const subtotalEl = document.getElementById(`inward-item-subtotal-${index}`);
+    if (subtotalEl) {
+      subtotalEl.textContent = `Rs. ${(qty * rate).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    }
+
+    this.calculateInwardTotal();
+  }
+
+  calculateInwardTotal() {
+    let total = 0;
+    this.inwardItems.forEach(item => {
+      total += (item.quantity || 0) * (item.rate || 0);
+    });
+    const badge = document.getElementById('inward-total-amount');
+    if (badge) {
+      badge.textContent = `Total: Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    }
+  }
+
+  async renderInwardItems() {
+    const container = document.getElementById('inward-items-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const orders = await this.db.getOrders();
+    const pendingOrders = orders.filter(o => o.status === 'Pending');
+    const materials = await this.db.getRawMaterials();
+
+    this.inwardItems.forEach((item, index) => {
+      const box = document.createElement('div');
+      box.className = 'multi-item-box';
+
+      const selectedMat = materials.find(m => m.id === item.material_id);
+      const unit = selectedMat ? selectedMat.unit : 'unit';
+      const subtotal = (item.quantity || 0) * (item.rate || 0);
+
+      // Construct dropdown with optgroups
+      let optionsHtml = '<option value="" disabled selected>-- Link Order or Select Material --</option>';
+
+      if (pendingOrders.length > 0) {
+        optionsHtml += '<optgroup label="📋 Pending Purchase Orders">';
+        pendingOrders.forEach(o => {
+          const isSel = item.linked_order_id === o.id ? 'selected' : '';
+          optionsHtml += `<option value="${o.id}" ${isSel}>Order: ${o.material_name} (Req: ${o.quantity_requested} pcs) - ${o.vendor_name || 'PO'}</option>`;
+        });
+        optionsHtml += '</optgroup>';
+      }
+
+      optionsHtml += '<optgroup label="📦 Direct Material Inward (No PO)">';
+      materials.forEach(m => {
+        const isSel = (!item.linked_order_id && item.material_id === m.id) ? 'selected' : '';
+        optionsHtml += `<option value="mat_${m.id}" ${isSel}>${m.name} (${m.code}) - ${m.unit}</option>`;
+      });
+      optionsHtml += '</optgroup>';
+
+      const removeBtnHtml = this.inwardItems.length > 1
+        ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeInwardItemRow(${index})"><i class="fa-solid fa-trash-can"></i> Remove</button>`
+        : '';
+
+      box.innerHTML = `
+        <div class="multi-item-header">
+          <span><i class="fa-solid fa-circle-down"></i> Inward Item #${index + 1}</span>
+          ${removeBtnHtml}
+        </div>
+        <div class="form-group" style="margin-bottom:0.45rem;">
+          <select class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateInwardItem(${index}, 'select_source', this.value)" required>
+            ${optionsHtml}
+          </select>
+        </div>
+        <div class="form-row" style="margin-bottom:0.25rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Received Qty (${unit}) *</label>
+            <input type="number" step="0.001" min="0.001" id="inward-item-qty-${index}" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.quantity || ''}" placeholder="Actual received" oninput="app.updateInwardItem(${index}, 'quantity', this.value)" required>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Billed Rate (Rs.) *</label>
+            <input type="number" step="0.01" min="0.01" id="inward-item-rate-${index}" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.rate || ''}" placeholder="Unit price" oninput="app.updateInwardItem(${index}, 'rate', this.value)" required>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">
+          Line Total: <strong id="inward-item-subtotal-${index}" style="margin-left:0.35rem; color:var(--text-color);">Rs. ${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+        </div>
+      `;
+      container.appendChild(box);
+    });
+
+    this.calculateInwardTotal();
+
+    const submitBtn = document.getElementById('inward-submit-btn');
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> Commit Inward & Verify (${this.inwardItems.length} Item${this.inwardItems.length > 1 ? 's' : ''})`;
+    }
+  }
+
+  // Handle manual form submission for Inward
+  async handleManualInwardSubmit(e) {
+    e.preventDefault();
+
+    const invoiceNo = (document.getElementById('inward-invoice') ? document.getElementById('inward-invoice').value.trim() : '');
+    const inwardDate = (document.getElementById('inward-date') && document.getElementById('inward-date').value) || this.getTodayDate();
+    const supplier = (document.getElementById('inward-supplier') ? document.getElementById('inward-supplier').value.trim() : '');
+
+    if (!invoiceNo || !supplier) {
+      alert("Bill / Invoice Reference and Supplier Name are required.");
+      return;
+    }
+
+    if (!this.inwardItems || this.inwardItems.length === 0) {
+      alert("Please add at least one material to inward.");
+      return;
+    }
+
+    for (let i = 0; i < this.inwardItems.length; i++) {
+      const it = this.inwardItems[i];
+      if (!it.material_id) {
+        alert(`Please select an order or material for Inward Item #${i + 1}.`);
+        return;
+      }
+      if (!it.quantity || it.quantity <= 0) {
+        alert(`Please enter a valid received quantity for Inward Item #${i + 1}.`);
+        return;
+      }
+      if (!it.rate || it.rate <= 0) {
+        alert(`Please enter a valid billed rate for Inward Item #${i + 1}.`);
+        return;
+      }
+    }
+
+    await this.processMultiInwardIngest(this.inwardItems, invoiceNo, inwardDate, supplier);
+
+    document.getElementById('inward-manual-form').reset();
+    this.inwardItems = [{ linked_order_id: '', material_id: '', quantity: 50, rate: 0 }];
+    this.initDateInputs();
+    await this.renderInwardPane();
   }
 
   // Read purchase invoice bill PDF or Image/Photo via pdf.js & Tesseract OCR
@@ -683,9 +1145,15 @@ class MFPMobilePortal {
 
       const extracted = this.heuristicsExtractPurchase(rawText);
 
-      this.currentVerifyInwardItem = extracted;
+      this.currentVerifyInwardItems = [{
+        raw_text_name: extracted.raw_text_name,
+        material_id: '',
+        quantity: extracted.quantity,
+        rate: extracted.rate,
+        supplier: extracted.supplier
+      }];
 
-      // Populate review modal
+      // Populate review modal header
       document.getElementById('vi-invoice').value = extracted.invoice_no;
       const viDateEl = document.getElementById('vi-date');
       if (viDateEl) viDateEl.value = extracted.date || this.getTodayDate();
@@ -703,6 +1171,7 @@ class MFPMobilePortal {
         }
       }
 
+      // Populate associated order dropdown
       const orderSelect = document.getElementById('vi-linked-order');
       orderSelect.innerHTML = '<option value="">-- No Link (Standalone Inward) --</option>';
       const orders = await this.db.getOrders();
@@ -712,30 +1181,7 @@ class MFPMobilePortal {
         orderSelect.innerHTML += `<option value="${o.id}" ${selected}>${o.material_name} (Req: ${o.quantity_requested})</option>`;
       });
 
-      const tbody = document.getElementById('verify-inward-rows');
-      tbody.innerHTML = `
-        <tr>
-          <td>
-            <div class="td-bold" style="font-size:0.75rem;">Extracted: "${extracted.raw_text_name}"</div>
-            <select class="form-control" style="font-size:0.8rem; padding: 0.35rem;" id="vi-mapped-material">
-              <!-- Loaded dynamically -->
-            </select>
-          </td>
-          <td><input type="number" step="0.001" class="form-control" style="font-size:0.8rem; padding:0.35rem;" id="vi-qty" value="${extracted.quantity}"></td>
-          <td><input type="number" step="0.01" class="form-control" style="font-size:0.8rem; padding:0.35rem;" id="vi-rate" value="${extracted.rate}"></td>
-          <td><input type="text" class="form-control" style="font-size:0.8rem; padding:0.35rem;" id="vi-supplier" value="${extracted.supplier}"></td>
-        </tr>
-      `;
-
-      // Populate raw material selectors inside verify table
-      const viMapSelect = document.getElementById('vi-mapped-material');
-      const materials = await this.db.getRawMaterials();
-      viMapSelect.innerHTML = '<option value="" disabled selected>-- Match Material --</option>';
-      materials.forEach(m => {
-        const selected = extracted.raw_text_name.toLowerCase().includes(m.name.toLowerCase()) ? 'selected' : '';
-        viMapSelect.innerHTML += `<option value="${m.id}" ${selected}>${m.name} (${m.code})</option>`;
-      });
-
+      await this.renderVerifyInwardTable();
       this.openModal('modal-verify-inward');
     } catch (e) {
       console.error(e);
@@ -749,170 +1195,645 @@ class MFPMobilePortal {
     }
   }
 
+  async renderVerifyInwardTable() {
+    const tbody = document.getElementById('verify-inward-rows');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const materials = await this.db.getRawMaterials();
+
+    this.currentVerifyInwardItems.forEach((item, index) => {
+      const tr = document.createElement('tr');
+
+      let matOptions = '<option value="" disabled selected>-- Match Material --</option>';
+      materials.forEach(m => {
+        const isMatched = item.material_id === m.id || (!item.material_id && item.raw_text_name && item.raw_text_name.toLowerCase().includes(m.name.toLowerCase()));
+        if (isMatched && !item.material_id) item.material_id = m.id;
+        const selected = isMatched ? 'selected' : '';
+        matOptions += `<option value="${m.id}" ${selected}>${m.name} (${m.code})</option>`;
+      });
+
+      const removeBtn = this.currentVerifyInwardItems.length > 1
+        ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeVerifyInwardRow(${index})"><i class="fa-solid fa-trash-can"></i></button>`
+        : '';
+
+      tr.innerHTML = `
+        <td>
+          <div class="td-bold" style="font-size:0.75rem; margin-bottom:0.2rem;">Extracted: "${item.raw_text_name || 'Line Item'}"</div>
+          <select class="form-control" style="font-size:0.75rem; padding:0.25rem 0.4rem;" onchange="app.updateVerifyInwardItem(${index}, 'material_id', this.value)">
+            ${matOptions}
+          </select>
+        </td>
+        <td><input type="number" step="0.001" class="form-control" style="font-size:0.8rem; padding:0.25rem 0.35rem;" value="${item.quantity}" oninput="app.updateVerifyInwardItem(${index}, 'quantity', this.value)"></td>
+        <td><input type="number" step="0.01" class="form-control" style="font-size:0.8rem; padding:0.25rem 0.35rem;" value="${item.rate}" oninput="app.updateVerifyInwardItem(${index}, 'rate', this.value)"></td>
+        <td><input type="text" class="form-control" style="font-size:0.75rem; padding:0.25rem 0.35rem;" value="${item.supplier || ''}" oninput="app.updateVerifyInwardItem(${index}, 'supplier', this.value)"></td>
+        <td style="text-align:center;">${removeBtn}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  addVerifyInwardRow() {
+    this.currentVerifyInwardItems.push({
+      raw_text_name: 'Manual Material Line',
+      material_id: '',
+      quantity: 10,
+      rate: 100,
+      supplier: (this.currentVerifyInwardItems[0] ? this.currentVerifyInwardItems[0].supplier : '')
+    });
+    this.renderVerifyInwardTable();
+  }
+
+  removeVerifyInwardRow(idx) {
+    if (this.currentVerifyInwardItems.length > 1) {
+      this.currentVerifyInwardItems.splice(idx, 1);
+      this.renderVerifyInwardTable();
+    }
+  }
+
+  updateVerifyInwardItem(index, key, val) {
+    if (this.currentVerifyInwardItems[index]) {
+      if (key === 'quantity' || key === 'rate') {
+        this.currentVerifyInwardItems[index][key] = parseFloat(val) || 0;
+      } else {
+        this.currentVerifyInwardItems[index][key] = val;
+      }
+    }
+  }
+
   // Commit verify purchase receipt and trigger crosscheck validations
   async commitVerifyInward() {
     const invoiceNo = document.getElementById('vi-invoice').value.trim();
     const inwardDate = (document.getElementById('vi-date') && document.getElementById('vi-date').value) || this.getTodayDate();
     const linkedOrderId = document.getElementById('vi-linked-order').value;
-    const materialId = document.getElementById('vi-mapped-material').value;
-    const qty = parseFloat(document.getElementById('vi-qty').value) || 0;
-    const rate = parseFloat(document.getElementById('vi-rate').value) || 0;
-    const supplier = document.getElementById('vi-supplier').value.trim();
 
-    if (!invoiceNo || !materialId || qty <= 0 || rate <= 0 || !supplier) {
-      alert("All fields are required to commit inward stock.");
+    if (!invoiceNo) {
+      alert("Invoice Number is required.");
       return;
     }
 
-    const materials = await this.db.getRawMaterials();
-    const mat = materials.find(m => m.id === materialId);
-    if (!mat) return;
+    if (!this.currentVerifyInwardItems || this.currentVerifyInwardItems.length === 0) {
+      alert("No line items to inward.");
+      return;
+    }
+
+    const unmapped = this.currentVerifyInwardItems.find(i => !i.material_id || i.quantity <= 0 || i.rate <= 0);
+    if (unmapped) {
+      alert("Please map all raw materials and enter valid quantities and rates.");
+      return;
+    }
+
+    const supplier = (this.currentVerifyInwardItems[0] && this.currentVerifyInwardItems[0].supplier) ? this.currentVerifyInwardItems[0].supplier : 'Supplier Dispatch';
 
     this.closeModal('modal-verify-inward');
-    await this.processInwardIngest({
-      date: inwardDate,
-      invoice_no: invoiceNo,
-      material_id: materialId,
-      material_name: mat.name,
-      quantity_received: qty,
-      rate_billed: rate,
-      supplier,
-      linked_order_id: linkedOrderId || null
-    });
+
+    const formattedItems = this.currentVerifyInwardItems.map((item, idx) => ({
+      linked_order_id: (idx === 0 ? linkedOrderId : ''),
+      material_id: item.material_id,
+      quantity: item.quantity,
+      rate: item.rate,
+      supplier: item.supplier || supplier
+    }));
+
+    await this.processMultiInwardIngest(formattedItems, invoiceNo, inwardDate, supplier);
   }
 
-  // Handle manual form submission for Inward
-  async handleManualInwardSubmit(e) {
+  // Multi-item Inward ingestion engine with cross-check variances
+  async processMultiInwardIngest(items, invoiceNo, inwardDate, supplier) {
+    const materials = await this.db.getRawMaterials();
+    const orders = await this.db.getOrders();
+
+    let totalBilled = 0;
+    let varianceReportLines = '';
+    let hasAnyVariance = false;
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const mat = materials.find(m => m.id === it.material_id);
+      const matName = mat ? mat.name : 'Raw Material';
+      const unit = mat ? mat.unit : 'units';
+      const itemSubtotal = (it.quantity || 0) * (it.rate || 0);
+      totalBilled += itemSubtotal;
+
+      let itemHasVariance = false;
+      let itemVarianceNote = '';
+
+      if (it.linked_order_id) {
+        const ord = orders.find(o => o.id === it.linked_order_id);
+        if (ord) {
+          const qtyDiff = it.quantity - ord.quantity_requested;
+          const rateDiff = it.rate - (ord.price_suggested || 0);
+
+          const qtyMismatch = Math.abs(qtyDiff) > 0.001;
+          const rateMismatch = Math.abs(rateDiff) > 0.01;
+
+          if (qtyMismatch || rateMismatch) {
+            itemHasVariance = true;
+            hasAnyVariance = true;
+
+            let issues = [];
+            if (qtyMismatch) {
+              issues.push(qtyDiff > 0 ? `Excess Qty: +${qtyDiff.toFixed(3)} ${unit}` : `Shortage Qty: ${qtyDiff.toFixed(3)} ${unit}`);
+            }
+            if (rateMismatch) {
+              issues.push(rateDiff > 0 ? `Price Overcharge: +Rs. ${rateDiff.toFixed(2)}` : `Price Discount: -Rs. ${Math.abs(rateDiff).toFixed(2)}`);
+            }
+            itemVarianceNote = issues.join(', ');
+
+            varianceReportLines += `${i + 1}. *${matName}*\n` +
+                                   `   • Ordered: ${ord.quantity_requested} ${unit} @ Rs. ${(ord.price_suggested || 0).toFixed(2)}\n` +
+                                   `   • Received: ${it.quantity} ${unit} @ Rs. ${it.rate.toFixed(2)}\n` +
+                                   `   🔴 *Variance:* ${itemVarianceNote}\n\n`;
+          } else {
+            varianceReportLines += `${i + 1}. *${matName}*: ${it.quantity} ${unit} @ Rs. ${it.rate.toFixed(2)} (🟢 Matched Order)\n\n`;
+          }
+        }
+      } else {
+        varianceReportLines += `${i + 1}. *${matName}*: ${it.quantity} ${unit} @ Rs. ${it.rate.toFixed(2)} (Direct Inward)\n\n`;
+      }
+
+      await this.db.insertInward({
+        date: inwardDate,
+        invoice_no: invoiceNo,
+        material_id: it.material_id,
+        material_name: matName,
+        quantity_received: it.quantity,
+        rate_billed: it.rate,
+        supplier: it.supplier || supplier,
+        linked_order_id: it.linked_order_id || null,
+        has_variance: itemHasVariance,
+        variance_notes: itemVarianceNote
+      });
+    }
+
+    // Formulate consolidated WhatsApp message
+    const waHeader = hasAnyVariance
+      ? `⚠️ *MFP ERP - Material Inward Variance Warning*\n`
+      : `📋 *MFP ERP - Material Inward Confirmation*\n`;
+
+    const waText = waHeader +
+                   `• *Date:* ${inwardDate}\n` +
+                   `• *Invoice / Bill No:* ${invoiceNo}\n` +
+                   `• *Supplier / Vendor:* ${supplier}\n\n` +
+                   `*Received Items (${items.length}):*\n` +
+                   varianceReportLines +
+                   `*Total Bill Value:* Rs. ${totalBilled.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+                   `\n_Warehouse stocks updated & weighted average costs recalculated via Mobile Console._`;
+
+    document.getElementById('inward-wa-text').value = waText;
+    document.getElementById('inward-wa-widget').classList.remove('hidden');
+
+    await this.refreshAllViews();
+    alert(`Inward completed for ${items.length} material(s) on Bill ${invoiceNo}! Stock updated & WhatsApp alert ready.`);
+  }
+
+
+  // --- 2B. MATERIAL RETURNED (CREDIT NOTE / SALES RETURN) WORKFLOW ---
+
+  switchInwardSubSection(tab) {
+    this.inwardActiveSubTab = tab;
+    const btnRaw = document.getElementById('btn-inward-raw');
+    const btnReturn = document.getElementById('btn-inward-return');
+    const secRaw = document.getElementById('inward-raw-section');
+    const secReturn = document.getElementById('inward-return-section');
+
+    if (tab === 'return') {
+      if (btnRaw) btnRaw.classList.remove('active');
+      if (btnReturn) btnReturn.classList.add('active');
+      if (secRaw) secRaw.classList.add('hidden');
+      if (secReturn) secReturn.classList.remove('hidden');
+      this.renderReturnPane();
+    } else {
+      if (btnRaw) btnRaw.classList.add('active');
+      if (btnReturn) btnReturn.classList.remove('active');
+      if (secRaw) secRaw.classList.remove('hidden');
+      if (secReturn) secReturn.classList.add('hidden');
+      this.renderInwardItems();
+    }
+  }
+
+  async renderReturnPane() {
+    const products = await this.db.getProducts();
+    if (!this.returnItems || this.returnItems.length === 0) {
+      this.returnItems = [{
+        product_id: (products[0] ? products[0].id : ''),
+        quantity: 10,
+        mfg_date: this.getTodayDate(),
+        rate: (products[0] ? parseFloat(products[0].selling_price || 0) : 0),
+        batch_no: ''
+      }];
+    }
+    await this.renderReturnItems();
+    await this.renderRecentReturnsList();
+  }
+
+  async addReturnItemRow() {
+    const products = await this.db.getProducts();
+    const defaultProd = products[0];
+    this.returnItems.push({
+      product_id: defaultProd ? defaultProd.id : '',
+      quantity: 10,
+      mfg_date: this.getTodayDate(),
+      rate: defaultProd ? parseFloat(defaultProd.selling_price || 0) : 0,
+      batch_no: ''
+    });
+    await this.renderReturnItems();
+  }
+
+  removeReturnItemRow(index) {
+    if (this.returnItems.length > 1) {
+      this.returnItems.splice(index, 1);
+      this.renderReturnItems();
+    }
+  }
+
+  async updateReturnItem(index, field, val) {
+    if (!this.returnItems[index]) return;
+
+    if (field === 'product_id') {
+      this.returnItems[index].product_id = val;
+      const products = await this.db.getProducts();
+      const p = products.find(x => x.id === val);
+      if (p && (!this.returnItems[index].rate || this.returnItems[index].rate === 0)) {
+        this.returnItems[index].rate = parseFloat(p.selling_price || 0);
+        const rateInput = document.getElementById(`return-item-rate-${index}`);
+        if (rateInput) rateInput.value = this.returnItems[index].rate;
+      }
+    } else if (field === 'quantity') {
+      this.returnItems[index].quantity = parseInt(val, 10) || 0;
+    } else if (field === 'mfg_date') {
+      this.returnItems[index].mfg_date = val;
+    } else if (field === 'rate') {
+      this.returnItems[index].rate = parseFloat(val) || 0;
+    } else if (field === 'batch_no') {
+      this.returnItems[index].batch_no = val.trim();
+    }
+
+    const totalPcs = this.returnItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const badge = document.getElementById('return-total-qty');
+    if (badge) badge.textContent = `${totalPcs} pcs total`;
+
+    const submitBtn = document.getElementById('return-submit-btn');
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> Restock Finished Goods from Credit Note (${totalPcs} pcs)`;
+    }
+  }
+
+  async renderReturnItems() {
+    const container = document.getElementById('return-items-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const products = await this.db.getProducts();
+    const categories = ['Bottles', 'Pouches', 'Sachets', 'Horeca'];
+
+    this.returnItems.forEach((item, index) => {
+      const box = document.createElement('div');
+      box.className = 'multi-item-box';
+      box.style.borderLeft = '3px solid var(--color-warning)';
+
+      let optionsHtml = '<option value="" disabled selected>-- Select Returned FG SKU --</option>';
+
+      categories.forEach(cat => {
+        const catProds = products.filter(p => p.packaging_type === cat);
+        if (catProds.length > 0) {
+          optionsHtml += `<optgroup label="📦 ${cat}">`;
+          catProds.forEach(p => {
+            const isSel = item.product_id === p.id ? 'selected' : '';
+            optionsHtml += `<option value="${p.id}" ${isSel}>${p.name} (${p.code}) - Stock: ${parseFloat(p.current_stock || 0).toFixed(0)} pcs</option>`;
+          });
+          optionsHtml += `</optgroup>`;
+        }
+      });
+
+      const otherProds = products.filter(p => !categories.includes(p.packaging_type));
+      if (otherProds.length > 0) {
+        optionsHtml += `<optgroup label="Other Finished Goods">`;
+        otherProds.forEach(p => {
+          const isSel = item.product_id === p.id ? 'selected' : '';
+          optionsHtml += `<option value="${p.id}" ${isSel}>${p.name} (${p.code})</option>`;
+        });
+        optionsHtml += `</optgroup>`;
+      }
+
+      const removeBtnHtml = this.returnItems.length > 1
+        ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeReturnItemRow(${index})"><i class="fa-solid fa-trash-can"></i> Remove</button>`
+        : '';
+
+      box.innerHTML = `
+        <div class="multi-item-header">
+          <span style="color:var(--color-warning); font-weight:600;"><i class="fa-solid fa-bottle-water"></i> Returned SKU #${index + 1}</span>
+          ${removeBtnHtml}
+        </div>
+        <div class="form-group" style="margin-bottom:0.45rem;">
+          <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Finished Good Product (FG) *</label>
+          <select class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateReturnItem(${index}, 'product_id', this.value)" required>
+            ${optionsHtml}
+          </select>
+        </div>
+        <div class="form-row" style="margin-bottom:0.35rem;">
+          <div class="form-group" style="margin-bottom:0; flex:1;">
+            <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Returned Qty (pcs) *</label>
+            <input type="number" step="1" min="1" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.quantity || ''}" placeholder="Pieces" oninput="app.updateReturnItem(${index}, 'quantity', this.value)" required>
+          </div>
+          <div class="form-group" style="margin-bottom:0; flex:1.2;">
+            <label style="font-size:0.7rem; color:#f59e0b; font-weight:600; margin-bottom:0.2rem;"><i class="fa-regular fa-calendar-check"></i> Mfd Date (Mfg Date) *</label>
+            <input type="date" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem; border-color: rgba(245, 158, 11, 0.4);" value="${item.mfg_date || this.getTodayDate()}" onchange="app.updateReturnItem(${index}, 'mfg_date', this.value)" required>
+          </div>
+        </div>
+        <div class="form-row" style="margin-bottom:0.2rem;">
+          <div class="form-group" style="margin-bottom:0; flex:1;">
+            <label style="font-size:0.68rem; color:var(--text-muted); margin-bottom:0.15rem;">Batch / Lot No (Optional)</label>
+            <input type="text" class="form-control" style="font-size:0.75rem; padding:0.3rem 0.45rem;" value="${item.batch_no || ''}" placeholder="e.g. B-2408" oninput="app.updateReturnItem(${index}, 'batch_no', this.value)">
+          </div>
+          <div class="form-group" style="margin-bottom:0; flex:1;">
+            <label style="font-size:0.68rem; color:var(--text-muted); margin-bottom:0.15rem;">Credit Rate (Rs./pc)</label>
+            <input type="number" step="0.01" min="0" id="return-item-rate-${index}" class="form-control" style="font-size:0.75rem; padding:0.3rem 0.45rem;" value="${item.rate || ''}" placeholder="Rs./unit" oninput="app.updateReturnItem(${index}, 'rate', this.value)">
+          </div>
+        </div>
+      `;
+      container.appendChild(box);
+    });
+
+    const totalPcs = this.returnItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const badge = document.getElementById('return-total-qty');
+    if (badge) badge.textContent = `${totalPcs} pcs total`;
+
+    const submitBtn = document.getElementById('return-submit-btn');
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> Restock Finished Goods from Credit Note (${totalPcs} pcs)`;
+    }
+  }
+
+  async handleCreditNoteUpload(file) {
+    if (!file) return;
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|gif|bmp|webp)$/i.test(file.name);
+
+    if (!isPdf && !isImage) {
+      alert("Unsupported format. Please upload a Credit Note PDF or photo/image.");
+      return;
+    }
+
+    let loadingDiv = document.getElementById('inward-loading-spinner');
+    if (loadingDiv) {
+      loadingDiv.style.display = 'flex';
+      document.getElementById('inward-spinner-text').textContent = 'Scanning Credit Note...';
+    }
+
+    try {
+      let rawText = '';
+      if (isPdf) {
+        if (loadingDiv) document.getElementById('inward-spinner-text').textContent = 'Extracting Credit Note PDF...';
+        rawText = await this.parsePDFText(file);
+      } else {
+        if (loadingDiv) document.getElementById('inward-spinner-text').textContent = 'Scanning Photo (OCR)...';
+        rawText = await this.parseImageText(file);
+      }
+
+      // Regex heuristics for Credit Note
+      const cnMatch = rawText.match(/(?:credit\s*note(?:\s*no\.?|\s*#)?|cr(?:\s*note)?|c\.?n\.?)\s*[:\s-]*([a-zA-Z0-9\/-]+)/i) ||
+                      rawText.match(/(?:inv(?:oice)?|ref)\s*[:\s-]*([a-zA-Z0-9\/-]+)/i) ||
+                      rawText.match(/(?:CN|CR)-[0-9-]+/i);
+      if (cnMatch && document.getElementById('return-credit-note-no')) {
+        document.getElementById('return-credit-note-no').value = cnMatch[1] ? cnMatch[1].trim() : cnMatch[0].trim();
+      }
+
+      const dateMatch = rawText.match(/(?:date|dt\.?)\s*[:\s-]*([0-9]{1,2}[-/.][0-9]{1,2}[-/.][0-9]{2,4})/i) ||
+                        rawText.match(/([0-9]{1,2}[-/.][0-9]{1,2}[-/.][0-9]{4})/);
+      if (dateMatch && document.getElementById('return-date')) {
+        document.getElementById('return-date').value = this.formatDateToISO(dateMatch[1]);
+      }
+
+      const custMatch = rawText.match(/(?:customer|client|buyer|party|m\/s\.?|to)\s*[:\s-]*([a-zA-Z0-9\s.,&'-]{3,40})/i);
+      if (custMatch && document.getElementById('return-customer')) {
+        let name = custMatch[1].split('\n')[0].replace(/GSTIN.*$/i, '').trim();
+        if (name) document.getElementById('return-customer').value = name;
+      }
+
+      // Match products in text
+      const products = await this.db.getProducts();
+      let matchedProds = [];
+      products.forEach(p => {
+        const pName = p.name.toLowerCase();
+        const pCode = p.code.toLowerCase();
+        if (rawText.toLowerCase().includes(pName) || rawText.toLowerCase().includes(pCode)) {
+          matchedProds.push(p);
+        }
+      });
+
+      if (matchedProds.length > 0) {
+        this.returnItems = matchedProds.map(p => ({
+          product_id: p.id,
+          quantity: 10,
+          mfg_date: this.getTodayDate(),
+          rate: parseFloat(p.selling_price || 0),
+          batch_no: ''
+        }));
+        await this.renderReturnItems();
+      }
+
+      alert("Credit Note scanned successfully! Please verify the details, adjust quantities, and confirm the Manufactured Dates.");
+    } catch (e) {
+      console.error(e);
+      alert("Error parsing Credit Note: " + e.message);
+    } finally {
+      if (loadingDiv) loadingDiv.style.display = 'none';
+      const fIn = document.getElementById('return-file-input');
+      if (fIn) fIn.value = '';
+      const cIn = document.getElementById('return-camera-input');
+      if (cIn) cIn.value = '';
+    }
+  }
+
+  async handleReturnSubmit(e) {
     e.preventDefault();
 
-    const invoiceNo = document.getElementById('inward-invoice').value.trim();
-    const inwardDate = (document.getElementById('inward-date') && document.getElementById('inward-date').value) || this.getTodayDate();
-    const linkedOrderId = document.getElementById('inward-linked-order').value;
-    const qty = parseFloat(document.getElementById('inward-qty').value) || 0;
-    const rate = parseFloat(document.getElementById('inward-rate').value) || 0;
-    const supplier = document.getElementById('inward-supplier').value.trim();
+    const creditNoteNo = (document.getElementById('return-credit-note-no') ? document.getElementById('return-credit-note-no').value.trim() : '');
+    const returnDate = (document.getElementById('return-date') && document.getElementById('return-date').value) || this.getTodayDate();
+    const customer = (document.getElementById('return-customer') ? document.getElementById('return-customer').value.trim() : '');
+    const reason = (document.getElementById('return-reason') ? document.getElementById('return-reason').value.trim() : '');
 
-    if (!invoiceNo || !linkedOrderId || qty <= 0 || rate <= 0) return;
+    if (!creditNoteNo || !customer) {
+      alert("Please enter Credit Note Number and Customer / Client Name.");
+      return;
+    }
 
-    const orders = await this.db.getOrders();
-    const ord = orders.find(o => o.id === linkedOrderId);
-    if (!ord) return;
+    if (!this.returnItems || this.returnItems.length === 0) {
+      alert("Please add at least one Finished Good SKU to restock.");
+      return;
+    }
 
-    await this.processInwardIngest({
-      date: inwardDate,
-      invoice_no: invoiceNo,
-      material_id: ord.material_id,
-      material_name: ord.material_name,
-      quantity_received: qty,
-      rate_billed: rate,
-      supplier,
-      linked_order_id: linkedOrderId
-    });
-
-    document.getElementById('inward-manual-form').reset();
-    this.initDateInputs();
-  }
-
-  // Cross-check Inward bill details with associated purchase order placed
-  async processInwardIngest(inward) {
-    let hasVariance = false;
-    let varianceNotes = '';
-    let waText = '';
-
-    if (inward.linked_order_id) {
-      const orders = await this.db.getOrders();
-      const ord = orders.find(o => o.id === inward.linked_order_id);
-      
-      if (ord) {
-        const qtyDiff = inward.quantity_received - ord.quantity_requested;
-        const rateDiff = inward.rate_billed - (ord.price_suggested || 0);
-
-        const qtyMismatch = Math.abs(qtyDiff) > 0.001;
-        const rateMismatch = Math.abs(rateDiff) > 0.01;
-
-        if (qtyMismatch || rateMismatch) {
-          hasVariance = true;
-          
-          let issues = [];
-          if (qtyMismatch) {
-            issues.push(qtyDiff > 0 ? `Excess Qty: +${qtyDiff.toFixed(3)}` : `Shortage Qty: ${qtyDiff.toFixed(3)}`);
-          }
-          if (rateMismatch) {
-            issues.push(rateDiff > 0 ? `Price Overcharge: +Rs. ${rateDiff.toFixed(2)}` : `Price Discount: -Rs. ${Math.abs(rateDiff).toFixed(2)}`);
-          }
-
-          varianceNotes = issues.join(', ');
-
-          // Formulate WhatsApp Variance Alert with Date
-          waText = `⚠️ *MFP ERP - Inward Variance Warning*\n` +
-                   `• *Date:* ${inward.date || this.getTodayDate()}\n` +
-                   `• *Material:* ${inward.material_name}\n` +
-                   `• *Invoice / Bill No:* ${inward.invoice_no}\n` +
-                   `• *Supplier:* ${inward.supplier}\n\n` +
-                   `*Audit Comparison:*\n` +
-                   `• *Ordered Qty:* ${ord.quantity_requested} | *Received Qty:* ${inward.quantity_received}\n` +
-                   `• *Ordered Rate:* Rs. ${(ord.price_suggested || 0).toFixed(2)} | *Billed Rate:* Rs. ${inward.rate_billed.toFixed(2)}\n\n` +
-                   `🔴 *Variances Detected:* ${varianceNotes}\n` +
-                   `\n_Please check billed amounts with supplier. Inward logged in system._`;
-        }
+    for (let i = 0; i < this.returnItems.length; i++) {
+      const it = this.returnItems[i];
+      if (!it.product_id) {
+        alert(`Please select a Finished Good product for Item #${i + 1}.`);
+        return;
+      }
+      if (!it.quantity || it.quantity <= 0) {
+        alert(`Please enter a valid returned quantity for Item #${i + 1}.`);
+        return;
+      }
+      if (!it.mfg_date) {
+        alert(`Please specify the Manufactured Date (Mfd Date) for Item #${i + 1}.`);
+        return;
       }
     }
 
-    inward.has_variance = hasVariance;
-    inward.variance_notes = varianceNotes;
+    const products = await this.db.getProducts();
+    let totalPcs = 0;
+    let itemsLogText = '';
 
-    await this.db.insertInward(inward);
+    const returnPayload = {
+      credit_note_no: creditNoteNo,
+      date: returnDate,
+      customer: customer,
+      reason: reason,
+      items: this.returnItems.map((it, idx) => {
+        const prod = products.find(p => p.id === it.product_id);
+        const prodName = prod ? prod.name : 'Finished Good';
+        const prodCode = prod ? prod.code : '';
+        totalPcs += it.quantity;
 
-    if (hasVariance && waText) {
-      document.getElementById('inward-wa-text').value = waText;
-      document.getElementById('inward-wa-widget').classList.remove('hidden');
-    } else {
-      document.getElementById('inward-wa-widget').classList.add('hidden');
-      alert(`Inward processed! Stock successfully restocked without billing variance.`);
+        itemsLogText += `${idx + 1}. *${prodName}* (${prodCode})\n` +
+                        `   • Returned: *${it.quantity} pcs* (Restocked to FG)\n` +
+                        `   • *Mfd Date:* ${it.mfg_date}${it.batch_no ? ' | Batch: ' + it.batch_no : ''}\n`;
+
+        return {
+          product_id: it.product_id,
+          product_name: prodName,
+          product_code: prodCode,
+          quantity: it.quantity,
+          mfg_date: it.mfg_date,
+          batch_no: it.batch_no,
+          rate: it.rate
+        };
+      })
+    };
+
+    // Commit to database & restock Finished Goods
+    await this.db.insertMaterialReturn(returnPayload);
+
+    // Compile WhatsApp Return Log
+    const waText = `🔄 *MFP ERP - Material Returned (Credit Note Log)*\n` +
+                   `• *Credit Note No:* ${creditNoteNo}\n` +
+                   `• *Date:* ${returnDate}\n` +
+                   `• *Customer:* ${customer}\n` +
+                   (reason ? `• *Reason:* ${reason}\n` : '') +
+                   `• *Total Finished Goods Restocked:* ${totalPcs} pcs across ${this.returnItems.length} SKU(s)\n\n` +
+                   `*Restocked SKUs:*\n` +
+                   itemsLogText +
+                   `\n_Finished Goods warehouse inventory updated automatically. Logged via MFP Mobile Console._`;
+
+    const waTextEl = document.getElementById('return-wa-text');
+    const waWidget = document.getElementById('return-wa-widget');
+    if (waTextEl && waWidget) {
+      waTextEl.value = waText;
+      waWidget.classList.remove('hidden');
     }
 
+    const prevCount = this.returnItems.length;
+    document.getElementById('return-manual-form').reset();
+    this.returnItems = [{
+      product_id: (products[0] ? products[0].id : ''),
+      quantity: 10,
+      mfg_date: this.getTodayDate(),
+      rate: (products[0] ? parseFloat(products[0].selling_price || 0) : 0),
+      batch_no: ''
+    }];
+    this.initDateInputs();
+
+    await this.renderRecentReturnsList();
     await this.refreshAllViews();
+
+    alert(`Success! Restocked ${totalPcs} pcs across ${prevCount} Finished Good SKU(s) into inventory under Credit Note ${creditNoteNo}!`);
+  }
+
+  async renderRecentReturnsList() {
+    const list = document.getElementById('return-history-list');
+    if (!list) return;
+
+    const returns = await this.db.getReturns();
+    if (returns.length === 0) {
+      list.innerHTML = `<div class="td-muted italic text-center" style="padding:0.75rem;">No material returns logged yet.</div>`;
+      return;
+    }
+
+    list.innerHTML = '';
+    returns.slice(0, 10).forEach(ret => {
+      const card = document.createElement('div');
+      card.className = 'stock-cover-item';
+      card.style.flexDirection = 'column';
+      card.style.alignItems = 'stretch';
+      card.style.gap = '0.3rem';
+
+      let itemsSummary = '';
+      if (ret.items && ret.items.length > 0) {
+        ret.items.forEach(it => {
+          itemsSummary += `<div style="font-size:0.75rem; color:var(--text-dim);">• <strong>${it.product_name || 'Product'}</strong>: ${it.quantity} pcs (Mfd: ${it.mfg_date || 'N/A'}${it.batch_no ? ' / ' + it.batch_no : ''})</div>`;
+        });
+      }
+
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-weight:700; font-size:0.85rem; color:var(--color-warning);"><i class="fa-solid fa-file-invoice-dollar"></i> ${ret.credit_note_no}</span>
+          <span class="badge" style="background:rgba(245, 158, 11, 0.15); color:#f59e0b; font-size:0.7rem;">${ret.date}</span>
+        </div>
+        <div style="font-size:0.78rem; font-weight:600;">Customer: ${ret.customer}</div>
+        ${ret.reason ? `<div style="font-size:0.72rem; color:var(--text-muted); font-style:italic;">Reason: ${ret.reason}</div>` : ''}
+        <div style="border-top:1px dashed var(--border-color); padding-top:0.3rem; margin-top:0.15rem;">
+          ${itemsSummary}
+        </div>
+      `;
+      list.appendChild(card);
+    });
   }
 
 
-  // --- 3. DAILY BATCH PRODUCTION RUNS WORKFLOW ---
+  // --- 3. DAILY BATCH PRODUCTION RUNS WORKFLOW (MULTI-SKU) ---
 
   async renderProductionPane() {
     // Render Raw Materials checklist
     const materials = await this.db.getRawMaterials();
     const matContainer = document.getElementById('production-stock-container');
-    if (!matContainer) return;
+    if (matContainer) {
+      matContainer.innerHTML = '';
+      materials.forEach(m => {
+        let statusClass = 'ok';
+        let statusText = 'In Stock';
+        
+        if (m.current_stock <= 0) {
+          statusClass = 'out';
+          statusText = 'Out of Stock';
+        } else if (m.current_stock <= m.min_stock) {
+          statusClass = 'low';
+          statusText = 'Low Cover';
+        }
 
-    matContainer.innerHTML = '';
-    materials.forEach(m => {
-      let statusClass = 'ok';
-      let statusText = 'In Stock';
-      
-      if (m.current_stock <= 0) {
-        statusClass = 'out';
-        statusText = 'Out of Stock';
-      } else if (m.current_stock <= m.min_stock) {
-        statusClass = 'low';
-        statusText = 'Low Cover';
-      }
+        const div = document.createElement('div');
+        div.className = 'stock-cover-item';
+        div.innerHTML = `
+          <div>
+            <div class="td-bold" style="font-size:0.85rem;">${m.name} <span class="td-muted" style="font-size:0.75rem; font-family:monospace;">(${m.code})</span></div>
+            <div class="td-muted" style="font-size:0.75rem;">Avg Cost: Rs. ${m.average_price.toFixed(2)} / ${m.unit}</div>
+          </div>
+          <div style="text-align: right;">
+            <div class="td-bold" style="font-size:0.85rem;">${m.current_stock.toFixed(3)} ${m.unit}</div>
+            <span class="stock-status-tag ${statusClass}" style="margin-top:0.15rem; display:inline-block;">${statusText}</span>
+          </div>
+        `;
+        matContainer.appendChild(div);
+      });
+    }
 
-      const div = document.createElement('div');
-      div.className = 'stock-cover-item';
-      div.innerHTML = `
-        <div>
-          <div class="td-bold" style="font-size:0.85rem;">${m.name} <span class="td-muted" style="font-size:0.75rem; font-family:monospace;">(${m.code})</span></div>
-          <div class="td-muted" style="font-size:0.75rem;">Avg Cost: Rs. ${m.average_price.toFixed(2)} / ${m.unit}</div>
-        </div>
-        <div style="text-align: right;">
-          <div class="td-bold" style="font-size:0.85rem;">${m.current_stock.toFixed(3)} ${m.unit}</div>
-          <span class="stock-status-tag ${statusClass}" style="margin-top:0.15rem; display:inline-block;">${statusText}</span>
-        </div>
-      `;
-      matContainer.appendChild(div);
-    });
+    if (!this.productionItems || this.productionItems.length === 0) {
+      const products = await this.db.getProducts();
+      this.productionItems = [{ product_id: (products[0] ? products[0].id : ''), quantity: 50 }];
+    }
 
-    // Populate Product SKUs dropdown based on selected packaging group category
-    this.populateProductionProductDropdown();
+    await this.renderProductionItems();
+    await this.updateAggregatedRecipeChecklist();
   }
 
   switchProductionCategory(cat, btn) {
@@ -921,122 +1842,310 @@ class MFPMobilePortal {
     document.querySelectorAll('.sub-tabs-bar .sub-tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
 
-    this.populateProductionProductDropdown();
-    this.updateProductionRecipeChecklist();
+    this.renderProductionItems();
+    this.updateAggregatedRecipeChecklist();
   }
 
-  async populateProductionProductDropdown() {
+  async addProductionSKURow() {
     const products = await this.db.getProducts();
-    const select = document.getElementById('production-product');
-    if (!select) return;
+    const filtered = this.currentProductionCategory === 'All' 
+      ? products 
+      : products.filter(p => p.packaging_type === this.currentProductionCategory);
+    const defaultProd = filtered[0] || products[0];
 
-    select.innerHTML = '<option value="" disabled selected>-- Select SKU --</option>';
-    
-    // Filter product catalogs matching current packaging category
-    const filtered = products.filter(p => p.packaging_type === this.currentProductionCategory);
-    
-    if (filtered.length === 0) {
-      select.innerHTML = '<option value="" disabled>-- No SKUs defined under this category --</option>';
-      return;
+    this.productionItems.push({
+      product_id: defaultProd ? defaultProd.id : '',
+      quantity: 50
+    });
+
+    await this.renderProductionItems();
+    await this.updateAggregatedRecipeChecklist();
+  }
+
+  removeProductionSKURow(index) {
+    if (this.productionItems.length > 1) {
+      this.productionItems.splice(index, 1);
+      this.renderProductionItems();
+      this.updateAggregatedRecipeChecklist();
+    }
+  }
+
+  updateProductionSKU(index, field, val) {
+    if (!this.productionItems[index]) return;
+
+    if (field === 'product_id') {
+      this.productionItems[index].product_id = val;
+    } else if (field === 'quantity') {
+      this.productionItems[index].quantity = parseInt(val, 10) || 0;
     }
 
-    filtered.forEach(p => {
-      select.innerHTML += `<option value="${p.id}">${p.name} (${p.code})</option>`;
-    });
+    const totalPcs = this.productionItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const totalQtyBadge = document.getElementById('production-total-qty');
+    if (totalQtyBadge) {
+      totalQtyBadge.textContent = `${totalPcs} pcs total`;
+    }
+
+    const submitBtn = document.getElementById('production-submit-btn');
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-gears"></i> Record Daily Batch (${totalPcs} pcs across ${this.productionItems.length} SKUs)`;
+    }
+
+    this.updateAggregatedRecipeChecklist();
   }
 
-  // Pre-production forecast: computes available ingredient covers and checks raw material deficits
-  async updateProductionRecipeChecklist() {
-    const pId = document.getElementById('production-product').value;
-    const qtyProduced = parseFloat(document.getElementById('production-qty').value) || 0;
+  async renderProductionItems() {
+    const container = document.getElementById('production-items-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const products = await this.db.getProducts();
+
+    // Group products by packaging category
+    const categories = ['Bottles', 'Pouches', 'Sachets', 'Horeca'];
+
+    this.productionItems.forEach((item, index) => {
+      const box = document.createElement('div');
+      box.className = 'multi-item-box';
+
+      let optionsHtml = '<option value="" disabled selected>-- Select Product SKU --</option>';
+
+      categories.forEach(cat => {
+        const catProds = products.filter(p => p.packaging_type === cat);
+        if (catProds.length > 0) {
+          optionsHtml += `<optgroup label="📦 ${cat}">`;
+          catProds.forEach(p => {
+            const isSel = item.product_id === p.id ? 'selected' : '';
+            optionsHtml += `<option value="${p.id}" ${isSel}>${p.name} (${p.code})</option>`;
+          });
+          optionsHtml += `</optgroup>`;
+        }
+      });
+
+      // Products without matching standard category
+      const otherProds = products.filter(p => !categories.includes(p.packaging_type));
+      if (otherProds.length > 0) {
+        optionsHtml += `<optgroup label="Other Products">`;
+        otherProds.forEach(p => {
+          const isSel = item.product_id === p.id ? 'selected' : '';
+          optionsHtml += `<option value="${p.id}" ${isSel}>${p.name} (${p.code})</option>`;
+        });
+        optionsHtml += `</optgroup>`;
+      }
+
+      const removeBtnHtml = this.productionItems.length > 1
+        ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeProductionSKURow(${index})"><i class="fa-solid fa-trash-can"></i> Remove</button>`
+        : '';
+
+      box.innerHTML = `
+        <div class="multi-item-header">
+          <span><i class="fa-solid fa-tag"></i> Finished Good SKU #${index + 1}</span>
+          ${removeBtnHtml}
+        </div>
+        <div class="form-group" style="margin-bottom:0.45rem;">
+          <select class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateProductionSKU(${index}, 'product_id', this.value)" required>
+            ${optionsHtml}
+          </select>
+        </div>
+        <div class="form-row" style="margin-bottom:0.25rem;">
+          <div class="form-group" style="margin-bottom:0; flex:1;">
+            <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Batch Qty (pcs) *</label>
+            <input type="number" step="1" min="1" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.quantity || ''}" placeholder="Pieces" oninput="app.updateProductionSKU(${index}, 'quantity', this.value)" required>
+          </div>
+        </div>
+      `;
+      container.appendChild(box);
+    });
+
+    const totalPcs = this.productionItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const totalQtyBadge = document.getElementById('production-total-qty');
+    if (totalQtyBadge) {
+      totalQtyBadge.textContent = `${totalPcs} pcs total`;
+    }
+
+    const submitBtn = document.getElementById('production-submit-btn');
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-gears"></i> Record Daily Batch (${totalPcs} pcs across ${this.productionItems.length} SKUs)`;
+    }
+  }
+
+  // Pre-production forecast: aggregates BOM raw materials across ALL active SKUs
+  async updateAggregatedRecipeChecklist() {
     const list = document.getElementById('production-checklist');
+    const statusEl = document.getElementById('production-checklist-status');
+    if (!list) return;
 
     list.innerHTML = '';
 
-    if (!pId || qtyProduced <= 0) {
-      list.innerHTML = `<span class="td-muted italic">Select a product SKU and batch size to forecast ingredient checklists.</span>`;
+    const products = await this.db.getProducts();
+    const rawMaterials = await this.db.getRawMaterials();
+
+    const aggregated = {}; // material_id -> total needed
+    let validSkusCount = 0;
+
+    this.productionItems.forEach(item => {
+      if (!item.product_id || !item.quantity || item.quantity <= 0) return;
+      const prod = products.find(p => p.id === item.product_id);
+      if (!prod || !prod.bom || prod.bom.length === 0) return;
+
+      validSkusCount++;
+      const batchQty = parseFloat(item.quantity) || 0;
+
+      prod.bom.forEach(recipe => {
+        const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage || 0) / 100);
+        const needed = parseFloat(recipe.quantity) * batchQty * wasteFactor;
+        aggregated[recipe.material_id] = (aggregated[recipe.material_id] || 0) + needed;
+      });
+    });
+
+    const matIds = Object.keys(aggregated);
+
+    if (matIds.length === 0) {
+      list.innerHTML = `<span class="td-muted italic">Add Finished Good SKUs and quantities above to forecast ingredient covers.</span>`;
+      if (statusEl) statusEl.textContent = '0 SKUs evaluated';
       return;
     }
 
-    const products = await this.db.getProducts();
-    const rawMaterials = await this.db.getRawMaterials();
-    
-    const prod = products.find(p => p.id === pId);
-    if (!prod) return;
+    let hasShortage = false;
+    let deficitCount = 0;
 
-    prod.bom.forEach(recipe => {
-      const mat = rawMaterials.find(m => m.id === recipe.material_id);
+    matIds.forEach(matId => {
+      const mat = rawMaterials.find(m => m.id === matId);
       const name = mat ? mat.name : 'Unknown Ingredient';
-      const unit = mat ? mat.unit : 'pcs';
+      const unit = mat ? mat.unit : 'units';
       const available = mat ? parseFloat(mat.current_stock || 0) : 0;
-      
-      const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage) / 100);
-      const totalNeeded = parseFloat(recipe.quantity) * qtyProduced * wasteFactor;
+      const totalNeeded = aggregated[matId];
       const isShort = totalNeeded > available;
 
+      if (isShort) {
+        hasShortage = true;
+        deficitCount++;
+      }
+
       const itemDiv = document.createElement('div');
-      itemDiv.style.display = 'flex';
-      itemDiv.style.justifyContent = 'space-between';
+      itemDiv.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:0.25rem 0.35rem; border-radius:4px; font-size:0.75rem;';
+      itemDiv.style.backgroundColor = isShort ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.05)';
       itemDiv.style.color = isShort ? 'var(--color-danger)' : 'var(--color-success)';
+
       itemDiv.innerHTML = `
-        <span>• ${name}: ${totalNeeded.toFixed(3)} ${unit} needed</span>
-        <strong>(Avail: ${available.toFixed(3)} ${unit}) ${isShort ? '⚠️ Deficit' : '✓'}</strong>
+        <div>
+          <strong>• ${name}</strong>: 
+          <span>${totalNeeded.toFixed(3)} ${unit} needed</span>
+        </div>
+        <div style="text-align:right;">
+          <span style="color:var(--text-muted); font-size:0.7rem;">(Avail: ${available.toFixed(3)} ${unit})</span>
+          ${isShort ? '<strong style="color:var(--color-danger); margin-left:0.25rem;">⚠️ Deficit</strong>' : '<strong style="color:var(--color-success); margin-left:0.25rem;">✓ OK</strong>'}
+        </div>
       `;
       list.appendChild(itemDiv);
     });
+
+    if (statusEl) {
+      statusEl.textContent = hasShortage 
+        ? `⚠️ ${deficitCount} Ingredient Shortage(s)` 
+        : `✓ All ${matIds.length} Ingredients in Stock`;
+      statusEl.style.color = hasShortage ? 'var(--color-danger)' : 'var(--color-success)';
+    }
   }
 
   async handleProductionSubmit(e) {
     e.preventDefault();
 
     const prodDate = (document.getElementById('production-date') && document.getElementById('production-date').value) || this.getTodayDate();
-    const pId = document.getElementById('production-product').value;
-    const qtyProduced = parseFloat(document.getElementById('production-qty').value) || 0;
+    const batchRef = (document.getElementById('production-batch-ref') ? document.getElementById('production-batch-ref').value.trim() : '');
 
-    if (!pId || qtyProduced <= 0) return;
+    if (!this.productionItems || this.productionItems.length === 0) {
+      alert("Please add at least one Finished Good SKU to the production batch.");
+      return;
+    }
+
+    // Validate all items
+    for (let i = 0; i < this.productionItems.length; i++) {
+      const it = this.productionItems[i];
+      if (!it.product_id) {
+        alert(`Please select a Finished Good SKU for Item #${i + 1}.`);
+        return;
+      }
+      if (!it.quantity || it.quantity <= 0) {
+        alert(`Please specify a valid batch quantity for Item #${i + 1}.`);
+        return;
+      }
+    }
 
     const products = await this.db.getProducts();
     const rawMaterials = await this.db.getRawMaterials();
-    
-    const prod = products.find(p => p.id === pId);
-    if (!prod) return;
 
-    // Check deficits
+    // Check aggregated ingredient deficits
+    const aggregated = {};
+    this.productionItems.forEach(item => {
+      const prod = products.find(p => p.id === item.product_id);
+      if (!prod || !prod.bom) return;
+      const batchQty = parseFloat(item.quantity) || 0;
+      prod.bom.forEach(recipe => {
+        const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage || 0) / 100);
+        const needed = parseFloat(recipe.quantity) * batchQty * wasteFactor;
+        aggregated[recipe.material_id] = (aggregated[recipe.material_id] || 0) + needed;
+      });
+    });
+
     let deficitStr = '';
-    prod.bom.forEach(recipe => {
-      const mat = rawMaterials.find(m => m.id === recipe.material_id);
+    Object.keys(aggregated).forEach(matId => {
+      const mat = rawMaterials.find(m => m.id === matId);
       const name = mat ? mat.name : 'Unknown';
       const available = mat ? parseFloat(mat.current_stock || 0) : 0;
-      
-      const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage) / 100);
-      const needed = parseFloat(recipe.quantity) * qtyProduced * wasteFactor;
-
+      const needed = aggregated[matId];
       if (needed > available) {
-        deficitStr += `Material "${name}" stock is ${available.toFixed(3)}, but batch requires ${needed.toFixed(3)}.\n`;
+        deficitStr += `• Material "${name}": Warehouse has ${available.toFixed(3)}, but batch requires ${needed.toFixed(3)}.\n`;
       }
     });
 
     if (deficitStr) {
-      const proceed = confirm(`Warning: Deficit detected in ingredients!\n\n${deficitStr}\nDo you still wish to execute the manufacturing batch?`);
+      const proceed = confirm(`Warning: Deficit detected in ingredients for this combined batch!\n\n${deficitStr}\nDo you wish to proceed and allow negative warehouse stock balance?`);
       if (!proceed) return;
     }
 
-    // Commit daily production run log with custom date
-    await this.db.insertProduction({
-      date: prodDate,
-      product_id: pId,
-      product_name: prod.name,
-      quantity_produced: qtyProduced,
-      packaging_type: prod.packaging_type
-    });
+    let itemsTextList = '';
+    let totalBatchPcs = 0;
 
-    // Clear form inputs
+    // Commit each production run SKU
+    for (let i = 0; i < this.productionItems.length; i++) {
+      const it = this.productionItems[i];
+      const prod = products.find(p => p.id === it.product_id);
+      if (prod) {
+        totalBatchPcs += it.quantity;
+
+        await this.db.insertProduction({
+          date: prodDate,
+          batch_ref: batchRef || undefined,
+          product_id: prod.id,
+          product_name: prod.name,
+          quantity_produced: it.quantity,
+          packaging_type: prod.packaging_type
+        });
+
+        itemsTextList += `${i + 1}. *${prod.name}* (${prod.code})\n` +
+                         `   • Output: *${it.quantity} pcs* (${prod.packaging_type})\n`;
+      }
+    }
+
+    // Compile WhatsApp Production Log
+    const waText = `🏭 *MFP ERP - Daily Production Run Log*\n` +
+                   `• *Date:* ${prodDate}\n` +
+                   (batchRef ? `• *Batch / Shift:* ${batchRef}\n` : '') +
+                   `• *Total Finished Goods Output:* ${totalBatchPcs} pcs across ${this.productionItems.length} SKUs\n\n` +
+                   `*Manufactured SKUs:*\n` +
+                   itemsTextList +
+                   `\n_Raw materials deducted based on BOM recipes & Finished Goods warehouse updated. Logged via MFP Mobile Console._`;
+
+    document.getElementById('production-wa-text').value = waText;
+    document.getElementById('production-wa-widget').classList.remove('hidden');
+
+    const prevCount = this.productionItems.length;
     document.getElementById('production-form').reset();
+    this.productionItems = [{ product_id: (products[0] ? products[0].id : ''), quantity: 50 }];
     this.initDateInputs();
-    document.getElementById('production-checklist').innerHTML = `<span class="td-muted italic">Select a product SKU and batch size to forecast ingredient checklists.</span>`;
 
     await this.refreshAllViews();
-    alert(`Success! Recorded manufacture batch of ${qtyProduced} pcs on ${prodDate}. Ingredients reduced & Finished Goods incremented.`);
+    alert(`Success! Recorded daily batch of ${totalBatchPcs} pcs across ${prevCount} SKU(s) on ${prodDate}! Stocks updated & WhatsApp report compiled.`);
   }
 
 
@@ -1093,62 +2202,209 @@ class MFPMobilePortal {
     }
   }
 
-  // Parse Sales dispatch invoice PDF heuristically via pdf.js
+  // --- SALE OUTWARD DISPATCH: PDF INVOICE PARSING & BATCH PROCESSING ---
+
   async handleOutwardUpload(file) {
-    if (!file || file.type !== 'application/pdf') {
-      alert("Invalid format. Sales invoice must be a PDF file.");
+    if (file) {
+      await this.handleOutwardUploadMultiple([file]);
+    }
+  }
+
+  async handleOutwardUploadMultiple(fileList) {
+    if (!fileList || fileList.length === 0) return;
+
+    const files = Array.from(fileList).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    if (files.length === 0) {
+      alert("Please select one or more PDF sales invoice files.");
       return;
     }
 
-    try {
-      const rawText = await this.parsePDFText(file);
-      const extracted = this.heuristicsExtractSale(rawText);
+    this.batchOutwardInvoices = [];
+    this.activeBatchOutwardIdx = 0;
 
-      this.currentVerifyOutwardItems = extracted.products;
-
-      // Populate review modal
-      document.getElementById('vo-invoice').value = extracted.invoice_no;
-      const voDateEl = document.getElementById('vo-date');
-      if (voDateEl) voDateEl.value = extracted.date || this.getTodayDate();
-      document.getElementById('vo-customer').value = 'FreshMart Wholesalers'; // Mock customer
-
-      const tbody = document.getElementById('verify-outward-rows');
-      tbody.innerHTML = '';
-
-      const products = await this.db.getProducts();
-
-      extracted.products.forEach((item, index) => {
-        const tr = document.createElement('tr');
-
-        // product options dropdown
-        let pOptions = '<option value="" disabled selected>-- Select FG SKU --</option>';
-        products.forEach(p => {
-          const selected = item.product_id === p.id ? 'selected' : '';
-          pOptions += `<option value="${p.id}" ${selected}>${p.name} (${p.code})</option>`;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const rawText = await this.parsePDFText(file);
+        const extracted = this.heuristicsExtractSale(rawText, file.name);
+        this.batchOutwardInvoices.push({
+          fileName: file.name,
+          invoice_no: extracted.invoice_no,
+          date: extracted.date,
+          customer: extracted.customer || 'Krishna Enterprises',
+          gstin: extracted.gstin || '',
+          net_amount: extracted.net_amount || 0,
+          products: extracted.products
         });
+      } catch (e) {
+        console.error("Error parsing sales invoice PDF: " + file.name, e);
+      }
+    }
 
-        tr.innerHTML = `
-          <td>
-            <div class="td-bold" style="font-size:0.75rem;">Extracted: "${item.raw_text_name}"</div>
-            <select class="form-control" style="font-size:0.8rem; padding: 0.35rem;" onchange="app.updateVerifyOutwardItem(${index}, 'product_id', this.value)">
-              ${pOptions}
-            </select>
-          </td>
-          <td>
-            <input type="number" class="form-control" style="font-size:0.8rem; padding:0.35rem;" value="${item.quantity_sold}" oninput="app.updateVerifyOutwardItem(${index}, 'quantity_sold', this.value)">
-          </td>
-          <td>
-            <input type="number" step="0.01" class="form-control" style="font-size:0.8rem; padding:0.35rem;" value="${item.rate}" oninput="app.updateVerifyOutwardItem(${index}, 'rate', this.value)">
-          </td>
-        `;
-        tbody.appendChild(tr);
+    if (this.batchOutwardInvoices.length === 0) {
+      alert("Could not extract sales invoice details from the selected PDF(s). Please verify the file format.");
+      return;
+    }
+
+    this.renderBatchOutwardModal();
+  }
+
+  renderBatchOutwardModal() {
+    if (!this.batchOutwardInvoices || this.batchOutwardInvoices.length === 0) {
+      this.closeModal('modal-verify-outward');
+      return;
+    }
+
+    if (this.activeBatchOutwardIdx >= this.batchOutwardInvoices.length) {
+      this.activeBatchOutwardIdx = this.batchOutwardInvoices.length - 1;
+    }
+    if (this.activeBatchOutwardIdx < 0) {
+      this.activeBatchOutwardIdx = 0;
+    }
+
+    const cur = this.batchOutwardInvoices[this.activeBatchOutwardIdx];
+    const isBatch = this.batchOutwardInvoices.length > 1;
+
+    const titleEl = document.getElementById('vo-modal-title');
+    if (titleEl) {
+      titleEl.textContent = isBatch 
+        ? `Review Sales Invoices (Batch: ${this.batchOutwardInvoices.length} Invoices)` 
+        : `Review Outward Sales Dispatch`;
+    }
+
+    const batchNav = document.getElementById('vo-batch-nav');
+    const batchTabs = document.getElementById('vo-batch-tabs');
+    const batchBadge = document.getElementById('vo-batch-badge');
+    const commitAllBtn = document.getElementById('vo-commit-all-btn');
+    const discardBtn = document.getElementById('vo-discard-btn');
+
+    if (batchNav) {
+      if (isBatch) {
+        batchNav.style.display = 'flex';
+        if (batchBadge) batchBadge.innerHTML = `<i class="fa-solid fa-layer-group"></i> Batch (${this.activeBatchOutwardIdx + 1}/${this.batchOutwardInvoices.length})`;
+        if (commitAllBtn) {
+          commitAllBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> Commit All (${this.batchOutwardInvoices.length}) Invoices`;
+        }
+        if (discardBtn) discardBtn.style.display = 'inline-block';
+
+        if (batchTabs) {
+          batchTabs.innerHTML = '';
+          this.batchOutwardInvoices.forEach((inv, idx) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `btn btn-sm ${idx === this.activeBatchOutwardIdx ? 'btn-primary' : 'btn-secondary'}`;
+            btn.style.fontSize = '0.72rem';
+            btn.style.padding = '0.2rem 0.45rem';
+            btn.style.whiteSpace = 'nowrap';
+            const label = inv.invoice_no || `Inv ${idx + 1}`;
+            btn.innerHTML = `${idx + 1}. <strong>${label}</strong> (${inv.products.length})`;
+            btn.onclick = () => this.switchBatchOutwardIdx(idx);
+            batchTabs.appendChild(btn);
+          });
+        }
+      } else {
+        batchNav.style.display = 'none';
+        if (discardBtn) discardBtn.style.display = 'none';
+      }
+    }
+
+    const invEl = document.getElementById('vo-invoice');
+    if (invEl) invEl.value = cur.invoice_no || '';
+
+    const dateEl = document.getElementById('vo-date');
+    if (dateEl) dateEl.value = cur.date || this.getTodayDate();
+
+    const custEl = document.getElementById('vo-customer');
+    if (custEl) custEl.value = cur.customer || '';
+
+    const netEl = document.getElementById('vo-net-amount');
+    if (netEl) netEl.innerHTML = `<i class="fa-solid fa-receipt"></i> Net Amount: Rs. ${(cur.net_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+
+    const countEl = document.getElementById('vo-item-count');
+    if (countEl) countEl.textContent = `${cur.products.length} line item(s)`;
+
+    this.currentVerifyOutwardItems = cur.products;
+    this.renderVerifyOutwardRows();
+    this.openModal('modal-verify-outward');
+  }
+
+  switchBatchOutwardIdx(idx) {
+    if (this.batchOutwardInvoices && this.batchOutwardInvoices[this.activeBatchOutwardIdx]) {
+      const invEl = document.getElementById('vo-invoice');
+      if (invEl) this.batchOutwardInvoices[this.activeBatchOutwardIdx].invoice_no = invEl.value.trim();
+      const dateEl = document.getElementById('vo-date');
+      if (dateEl) this.batchOutwardInvoices[this.activeBatchOutwardIdx].date = dateEl.value;
+      const custEl = document.getElementById('vo-customer');
+      if (custEl) this.batchOutwardInvoices[this.activeBatchOutwardIdx].customer = custEl.value.trim();
+    }
+    this.activeBatchOutwardIdx = idx;
+    this.renderBatchOutwardModal();
+  }
+
+  discardActiveOutwardBatch() {
+    if (!this.batchOutwardInvoices || this.batchOutwardInvoices.length === 0) return;
+    const discarded = this.batchOutwardInvoices[this.activeBatchOutwardIdx];
+    if (!confirm(`Discard invoice ${discarded.invoice_no || ''} from current queue?`)) return;
+
+    this.batchOutwardInvoices.splice(this.activeBatchOutwardIdx, 1);
+    if (this.batchOutwardInvoices.length === 0) {
+      this.closeModal('modal-verify-outward');
+    } else {
+      if (this.activeBatchOutwardIdx >= this.batchOutwardInvoices.length) {
+        this.activeBatchOutwardIdx = this.batchOutwardInvoices.length - 1;
+      }
+      this.renderBatchOutwardModal();
+    }
+  }
+
+  updateActiveBatchOutwardHeader(field, val) {
+    if (this.batchOutwardInvoices && this.batchOutwardInvoices[this.activeBatchOutwardIdx]) {
+      this.batchOutwardInvoices[this.activeBatchOutwardIdx][field] = val.trim();
+    }
+  }
+
+  async renderVerifyOutwardRows() {
+    const tbody = document.getElementById('verify-outward-rows');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const products = await this.db.getProducts();
+
+    this.currentVerifyOutwardItems.forEach((item, index) => {
+      const tr = document.createElement('tr');
+
+      let pOptions = '<option value="" disabled selected>-- Select FG SKU --</option>';
+      products.forEach(p => {
+        const selected = item.product_id === p.id ? 'selected' : '';
+        pOptions += `<option value="${p.id}" ${selected}>${p.name} (${p.code})</option>`;
       });
 
-      this.openModal('modal-verify-outward');
-    } catch (e) {
-      console.error(e);
-      alert("Failed to parse invoice PDF text: " + e.message);
-    }
+      const lineTotal = item.amount !== undefined ? item.amount : ((item.quantity_sold || 0) * Math.max(0, (item.rate || 0) - (item.discount || 0)));
+
+      tr.innerHTML = `
+        <td>
+          <div class="td-bold" style="font-size:0.75rem; word-break:break-word;" title="${item.raw_text_name}">
+            ${item.hsn ? `<span style="font-family:monospace; color:var(--text-muted); font-size:0.7rem;">[${item.hsn}]</span> ` : ''}${item.raw_text_name}
+          </div>
+          <select class="form-control" style="font-size:0.75rem; padding: 0.25rem 0.4rem; margin-top:0.25rem;" onchange="app.updateVerifyOutwardItem(${index}, 'product_id', this.value)">
+            ${pOptions}
+          </select>
+        </td>
+        <td>
+          <input type="number" class="form-control" style="font-size:0.8rem; padding:0.25rem 0.35rem; width:100%;" value="${item.quantity_sold}" oninput="app.updateVerifyOutwardItem(${index}, 'quantity_sold', this.value)">
+        </td>
+        <td>
+          <input type="number" step="0.01" class="form-control" style="font-size:0.8rem; padding:0.25rem 0.35rem; width:100%;" value="${item.rate}" oninput="app.updateVerifyOutwardItem(${index}, 'rate', this.value)">
+        </td>
+        <td>
+          <input type="number" step="0.01" class="form-control" style="font-size:0.8rem; padding:0.25rem 0.35rem; width:100%;" value="${item.discount || 0}" oninput="app.updateVerifyOutwardItem(${index}, 'discount', this.value)">
+        </td>
+        <td style="font-size:0.8rem; font-weight:600; text-align:right; white-space:nowrap; vertical-align:middle;" id="vo-line-total-${index}">
+          Rs. ${lineTotal.toFixed(2)}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
   }
 
   updateVerifyOutwardItem(index, key, val) {
@@ -1157,19 +2413,32 @@ class MFPMobilePortal {
         this.currentVerifyOutwardItems[index].product_id = val;
       } else if (key === 'rate') {
         this.currentVerifyOutwardItems[index].rate = parseFloat(val) || 0;
+      } else if (key === 'discount') {
+        this.currentVerifyOutwardItems[index].discount = parseFloat(val) || 0;
       } else {
         this.currentVerifyOutwardItems[index].quantity_sold = parseInt(val, 10) || 0;
       }
+
+      // Recompute line total
+      const item = this.currentVerifyOutwardItems[index];
+      item.amount = (item.quantity_sold || 0) * Math.max(0, (item.rate || 0) - (item.discount || 0));
+      const totalEl = document.getElementById(`vo-line-total-${index}`);
+      if (totalEl) totalEl.textContent = `Rs. ${item.amount.toFixed(2)}`;
     }
   }
 
   async commitVerifyOutward() {
-    const invoiceNo = document.getElementById('vo-invoice').value.trim();
+    const invoiceNo = (document.getElementById('vo-invoice') ? document.getElementById('vo-invoice').value.trim() : '');
     const outwardDate = (document.getElementById('vo-date') && document.getElementById('vo-date').value) || this.getTodayDate();
-    const customer = document.getElementById('vo-customer').value.trim();
+    const customer = (document.getElementById('vo-customer') ? document.getElementById('vo-customer').value.trim() : '');
 
     if (!invoiceNo || !customer) {
       alert("Invoice No and Customer Name are required.");
+      return;
+    }
+
+    if (!this.currentVerifyOutwardItems || this.currentVerifyOutwardItems.length === 0) {
+      alert("No line items to dispatch.");
       return;
     }
 
@@ -1197,8 +2466,6 @@ class MFPMobilePortal {
       if (!proceed) return;
     }
 
-    this.closeModal('modal-verify-outward');
-
     for (const item of this.currentVerifyOutwardItems) {
       const p = products.find(prod => prod.id === item.product_id);
       if (p) {
@@ -1208,14 +2475,85 @@ class MFPMobilePortal {
           product_id: item.product_id,
           product_name: p.name,
           quantity_dispatched: item.quantity_sold,
-          price_billed: item.rate || p.selling_price,
+          price_billed: item.rate || p.selling_price || 0,
           customer
         });
       }
     }
 
     await this.refreshAllViews();
-    alert(`Outward committed for ${outwardDate}! Shipped quantities deducted from Finished Goods available.`);
+
+    // Advance batch queue if in batch mode
+    if (this.batchOutwardInvoices && this.batchOutwardInvoices.length > 1) {
+      this.batchOutwardInvoices.splice(this.activeBatchOutwardIdx, 1);
+      if (this.activeBatchOutwardIdx >= this.batchOutwardInvoices.length) {
+        this.activeBatchOutwardIdx = this.batchOutwardInvoices.length - 1;
+      }
+      alert(`Invoice ${invoiceNo} committed successfully! Shipped quantities deducted from Finished Goods warehouse.\n\n${this.batchOutwardInvoices.length} invoice(s) remaining in batch.`);
+      this.renderBatchOutwardModal();
+    } else {
+      this.batchOutwardInvoices = [];
+      this.closeModal('modal-verify-outward');
+      alert(`Invoice ${invoiceNo} committed for ${outwardDate}! Shipped quantities deducted from Finished Goods available.`);
+    }
+  }
+
+  async commitAllBatchOutward() {
+    if (!this.batchOutwardInvoices || this.batchOutwardInvoices.length === 0) return;
+
+    // Save current active edits
+    if (this.batchOutwardInvoices[this.activeBatchOutwardIdx]) {
+      const invEl = document.getElementById('vo-invoice');
+      if (invEl) this.batchOutwardInvoices[this.activeBatchOutwardIdx].invoice_no = invEl.value.trim();
+      const dateEl = document.getElementById('vo-date');
+      if (dateEl) this.batchOutwardInvoices[this.activeBatchOutwardIdx].date = dateEl.value;
+      const custEl = document.getElementById('vo-customer');
+      if (custEl) this.batchOutwardInvoices[this.activeBatchOutwardIdx].customer = custEl.value.trim();
+    }
+
+    // Validate all invoices have required headers & product mappings
+    for (let i = 0; i < this.batchOutwardInvoices.length; i++) {
+      const inv = this.batchOutwardInvoices[i];
+      if (!inv.invoice_no) {
+        alert(`Invoice #${i + 1} is missing an Invoice Number. Please inspect it.`);
+        this.switchBatchOutwardIdx(i);
+        return;
+      }
+      const unmapped = inv.products.find(p => !p.product_id);
+      if (unmapped) {
+        alert(`Invoice "${inv.invoice_no}" has unmapped item "${unmapped.raw_text_name}". Please map it before committing batch.`);
+        this.switchBatchOutwardIdx(i);
+        return;
+      }
+    }
+
+    const totalInvoices = this.batchOutwardInvoices.length;
+    let totalLines = 0;
+    const products = await this.db.getProducts();
+
+    for (const inv of this.batchOutwardInvoices) {
+      for (const item of inv.products) {
+        const p = products.find(prod => prod.id === item.product_id);
+        if (p) {
+          await this.db.insertOutward({
+            date: inv.date || this.getTodayDate(),
+            invoice_no: inv.invoice_no,
+            product_id: item.product_id,
+            product_name: p.name,
+            quantity_dispatched: item.quantity_sold,
+            price_billed: item.rate || p.selling_price || 0,
+            customer: inv.customer || 'Customer Dispatch'
+          });
+          totalLines++;
+        }
+      }
+    }
+
+    this.batchOutwardInvoices = [];
+    this.closeModal('modal-verify-outward');
+    await this.refreshAllViews();
+
+    alert(`Batch Commit Successful!\n\nAll ${totalInvoices} sales invoices (${totalLines} total product dispatches) have been recorded and deducted from Finished Goods warehouse.`);
   }
 
   async handleManualOutwardSubmit(e) {
@@ -1259,6 +2597,7 @@ class MFPMobilePortal {
 
   // --- PARSERS & TEXT EXTRACTORS ---
 
+  // Document Text Parsers (Enhanced Layout-Aware Line Reconstructor)
   async parsePDFText(file) {
     const fileReader = new FileReader();
     return new Promise((resolve, reject) => {
@@ -1270,15 +2609,42 @@ class MFPMobilePortal {
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join('\n');
-            fullText += pageText + '\n';
+            
+            // Group text items by vertical row (tolerance ~3.5px)
+            const linesByY = {};
+            for (const item of textContent.items) {
+              if (!item || !item.str) continue;
+              const y = item.transform ? item.transform[5] : 0;
+              const roundedY = Math.round(y / 3.5) * 3.5;
+              if (!linesByY[roundedY]) linesByY[roundedY] = [];
+              linesByY[roundedY].push(item);
+            }
+
+            // Sort lines descending (from top of page down)
+            const sortedY = Object.keys(linesByY).map(Number).sort((a, b) => b - a);
+
+            for (const y of sortedY) {
+              const rowItems = linesByY[y];
+              // Sort items left-to-right by X coordinate
+              rowItems.sort((a, b) => (a.transform ? a.transform[4] : 0) - (b.transform ? b.transform[4] : 0));
+              let rowText = '';
+              for (const it of rowItems) {
+                rowText += it.str + ' ';
+              }
+              if (rowText.trim()) {
+                fullText += rowText.trim() + '\n';
+              }
+            }
+            fullText += '\n'; // Page separator
           }
           resolve(fullText);
         } catch (e) {
           reject(e);
         }
       };
-      fileReader.onerror = () => reject(new Error("File reading error."));
+      fileReader.onerror = function() {
+        reject(new Error("File reading error."));
+      };
       fileReader.readAsArrayBuffer(file);
     });
   }
@@ -1345,20 +2711,292 @@ class MFPMobilePortal {
     return result;
   }
 
-  heuristicsExtractSale(text) {
-    const result = { invoice_no: 'SAL-' + Math.floor(1000 + Math.random() * 9000), date: new Date().toISOString().split('T')[0], products: [] };
-    
-    // Seed at least one mock extracted row for review
-    const products = this.db.offlineDb.products;
-    const defaultProduct = products.length > 0 ? products[0] : { id: 'prod_peri_sauce', name: 'Signature Peri Peri Sauce 150ml', code: 'FG-PERI-150ML', selling_price: 160 };
+  heuristicsExtractSale(text, fileName = '') {
+    const result = {
+      invoice_no: '',
+      date: '',
+      customer: '',
+      gstin: '',
+      net_amount: 0,
+      products: []
+    };
 
-    result.products.push({
-      product_id: defaultProduct.id,
-      raw_text_name: defaultProduct.name,
-      quantity_sold: 10,
-      rate: defaultProduct.selling_price
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    // 1. EXTRACT INVOICE NUMBER
+    // Check standard MFP prefix (e.g., MFP-26-68, MFP-PI-26-01, MFP-26-44)
+    const mfpMatch = text.match(/\b(MFP(?:-[A-Za-z0-9]+)?-\d+-\d+)\b/i);
+    if (mfpMatch) {
+      result.invoice_no = mfpMatch[1].toUpperCase();
+    } else {
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const match = line.match(/(?:invoice\s*(?:no\.?|number|#)|inv\s*no\.?)\s*[:\-#]?\s*([A-Za-z0-9\-_/]+)/i);
+        if (match && match[1] && !/^(morella|date|dated)$/i.test(match[1])) {
+          result.invoice_no = match[1];
+          break;
+        }
+        if (/^invoice\s*no\.?$/i.test(line) && i + 1 < lines.length) {
+          result.invoice_no = lines[i + 1].trim();
+          break;
+        }
+      }
+    }
+
+    if (!result.invoice_no) {
+      const fnMatch = fileName.match(/(MFP[A-Za-z0-9\-_]+)/i) || fileName.match(/(INV[A-Za-z0-9\-_]+)/i);
+      result.invoice_no = fnMatch ? fnMatch[1] : ('SAL-' + Math.floor(1000 + Math.random() * 9000));
+    }
+
+    // 2. EXTRACT DATE
+    const dateMatch = text.match(/(?:dated|date|invoice\s*date)\s*[:\-]?\s*(\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4})/i) ||
+                      text.match(/(\d{2}[-\/.]\d{2}[-\/.]\d{4})/);
+    if (dateMatch) {
+      result.date = this.formatDateToISO(dateMatch[1]);
+    } else {
+      result.date = this.getTodayDate();
+    }
+
+    // 3. EXTRACT BUYER / RECIPIENT / CUSTOMER
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (/buyer\s*\/?\s*recipient/i.test(line) || /billed\s*to/i.test(line) || /bill\s*to/i.test(line)) {
+        if (i + 1 < lines.length) {
+          let custLine = lines[i + 1].trim();
+          if (custLine.toLowerCase().includes('delivery address')) {
+            custLine = custLine.split(/delivery address/i)[0].trim();
+          }
+          if (custLine) {
+            result.customer = custLine;
+            break;
+          }
+        }
+      }
+    }
+
+    // GSTIN
+    const gstinMatch = text.match(/gstin\s*[:\-]?\s*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})/i);
+    if (gstinMatch) result.gstin = gstinMatch[1];
+
+    // Net Amount
+    const netMatch = text.match(/net\s*amount\s*(?:\(rs\.?\))?\s*[:\-]?\s*([0-9,]+(?:\.\d{2})?)/i) ||
+                     text.match(/grand\s*total\s*[:\-]?\s*([0-9,]+(?:\.\d{2})?)/i);
+    if (netMatch) {
+      result.net_amount = parseFloat(netMatch[1].replace(/,/g, '')) || 0;
+    }
+
+    // 4. EXTRACT LINE ITEMS TABLE
+    const ignoredHeader = /^(hsn\s*code|description|terms|bank|branch|authorised|amount\s*in\s*words|cgst|sgst|round\s*off|net\s*amount|total|beneficiary|a\/c|ifsc)/i;
+
+    lines.forEach(line => {
+      if (ignoredHeader.test(line)) return;
+
+      // Pattern 1: Starts with HSN Code (6-8 digits)
+      // e.g. "21039040 truFLAVR Oregano Pizza Seasoning 10 gms Pouch 5% 1000 5.79 0.58 130.28 130.28 5211.00"
+      const hsnLineMatch = line.match(/^(\d{6,8})\s+(.+?)\s+(\d+(?:\.\d+)?%)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)(?:\s+(\d+(?:\.\d+)?))?(?:\s+(\d+(?:\.\d+)?))?(?:\s+(\d+(?:\.\d+)?))?\s+(\d+(?:\.\d+)?)$/);
+      if (hsnLineMatch) {
+        const hsn = hsnLineMatch[1];
+        const desc = hsnLineMatch[2].trim();
+        const qty = parseFloat(hsnLineMatch[4]) || 1;
+        const rate = parseFloat(hsnLineMatch[5]) || 0;
+        const disc = hsnLineMatch[6] ? parseFloat(hsnLineMatch[6]) : 0;
+        const amt = parseFloat(hsnLineMatch[9]) || (qty * Math.max(0, rate - disc));
+
+        const mappedId = this.autoMapProduct(desc);
+        result.products.push({
+          raw_text_name: desc,
+          hsn: hsn,
+          product_id: mappedId,
+          quantity_sold: Math.round(qty),
+          rate: rate,
+          discount: disc,
+          amount: amt
+        });
+        return;
+      }
+
+      // Pattern 2: Contains GST % with description before and numbers after
+      const gstMatch = line.match(/^(?:(\d{6,8})\s+)?(.+?)\s+(\d+(?:\.\d+)?%)\s+([\d\.\s]+)$/);
+      if (gstMatch) {
+        const hsn = gstMatch[1] || '';
+        const desc = gstMatch[2].trim();
+        const numPart = gstMatch[4].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+        
+        if (numPart.length >= 2) {
+          const qty = numPart[0];
+          const rate = numPart[1];
+          const disc = numPart.length >= 5 ? numPart[2] : 0;
+          const amt = numPart[numPart.length - 1];
+
+          const mappedId = this.autoMapProduct(desc);
+          result.products.push({
+            raw_text_name: desc,
+            hsn: hsn,
+            product_id: mappedId,
+            quantity_sold: Math.round(qty),
+            rate: rate,
+            discount: disc,
+            amount: amt
+          });
+          return;
+        }
+      }
+
+      // Pattern 3: Line contains product name keywords followed by numerical columns
+      const lowerLine = line.toLowerCase();
+      const hasProductKw = lowerLine.includes('truflavr') || 
+                           lowerLine.includes('seasoning') || 
+                           lowerLine.includes('chilli flakes') || 
+                           lowerLine.includes('oregano') || 
+                           lowerLine.includes('peri peri') || 
+                           lowerLine.includes('herb mix') || 
+                           lowerLine.includes('pouch') || 
+                           lowerLine.includes('bottle') || 
+                           lowerLine.includes('sachet');
+
+      if (hasProductKw) {
+        const numMatches = line.match(/\b\d+(?:\.\d+)?\b/g);
+        if (numMatches && numMatches.length >= 2) {
+          let startIndex = 0;
+          let hsn = '';
+          if (numMatches[0].length >= 6 && numMatches[0].length <= 8) {
+            hsn = numMatches[0];
+            startIndex = 1;
+          }
+          const validNums = numMatches.slice(startIndex).map(parseFloat);
+          if (validNums.length >= 2) {
+            const firstNumIdx = line.indexOf(numMatches[startIndex]);
+            let desc = line.substring(0, firstNumIdx).trim().replace(/^\d{6,8}\s+/, '').replace(/%$/, '').trim();
+            if (!desc && hsn) {
+              desc = line.replace(/^\d{6,8}\s+/, '').trim();
+            }
+            if (desc) {
+              const qty = validNums[0];
+              const rate = validNums[1];
+              const amt = validNums.length >= 3 ? validNums[validNums.length - 1] : (qty * rate);
+
+              const mappedId = this.autoMapProduct(desc);
+              result.products.push({
+                raw_text_name: desc,
+                hsn: hsn,
+                product_id: mappedId,
+                quantity_sold: Math.round(qty),
+                rate: rate,
+                discount: 0,
+                amount: amt
+              });
+            }
+          }
+        }
+      }
     });
+
+    if (result.products.length === 0) {
+      const products = this.db.offlineDb.products;
+      const defaultProduct = products.length > 0 ? products[0] : { id: '', name: 'Manual Dispatch Item', code: '', selling_price: 0 };
+      result.products.push({
+        raw_text_name: defaultProduct.name,
+        hsn: '',
+        product_id: defaultProduct.id,
+        quantity_sold: 1,
+        rate: defaultProduct.selling_price || 0,
+        discount: 0,
+        amount: 0
+      });
+    }
+
     return result;
+  }
+
+  autoMapProduct(name) {
+    if (!name) return '';
+    const clean = name.toLowerCase()
+      .replace(/\bchilly\b/g, "chilli")
+      .replace(/\bpiri\b/g, "peri")
+      .replace(/\bchess\b/g, "cheese")
+      .replace(/\bssong\b/g, "seasoning")
+      .replace(/\bsong\b/g, "seasoning");
+
+    const prods = this.db.offlineDb.products || [];
+
+    // 1. Direct match with existing products
+    let match = prods.find(p => p.name && p.name.toLowerCase() === clean);
+    if (match) return match.id;
+
+    match = prods.find(p => {
+      const pClean = (p.name || '').toLowerCase();
+      return clean.includes(pClean) || pClean.includes(clean) || (p.code && clean.includes(p.code.toLowerCase()));
+    });
+    if (match) return match.id;
+
+    // 2. Keyword matching with core product words
+    const noise = ['truflavr', 'gms', 'gm', 'pouch', 'pouches', 'bottle', 'bottles', 'sachet', 'sachets', 'pcs', 'box', 'boxes'];
+    const keywords = clean.split(/\s+/).filter(w => w.length > 2 && !noise.includes(w));
+    
+    let bestScore = 0;
+    let bestProduct = null;
+
+    prods.forEach(p => {
+      const pWords = (p.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 2 && !noise.includes(w));
+      if (pWords.length === 0) return;
+      let common = 0;
+      keywords.forEach(kw => {
+        if (pWords.some(pw => pw.includes(kw) || kw.includes(pw))) common++;
+      });
+      const score = common / Math.max(keywords.length, pWords.length);
+      if (score > bestScore && score >= 0.4) {
+        bestScore = score;
+        bestProduct = p;
+      }
+    });
+
+    if (bestProduct) return bestProduct.id;
+
+    // 3. Known catalogue products auto-seeding
+    const catalogue = [
+      { id: 'fg_or_pz_10g', name: 'truFLAVR Oregano Pizza Seasoning 10 gms Pouch', code: 'FG-OR-PZ-10G', price: 5.79, selling_price: 5.79, current_stock: 5000, min_stock: 500, packaging_type: 'Pouches' },
+      { id: 'fg_cf_10g', name: 'truFLAVR Chilli Flakes 10 gms Pouch', code: 'FG-CF-10G', price: 5.79, selling_price: 5.79, current_stock: 5000, min_stock: 500, packaging_type: 'Pouches' },
+      { id: 'fg_cf_45g', name: 'truFLAVR Chilli Flakes 45 gms Bottle', code: 'FG-CF-45G', price: 63.64, selling_price: 63.64, current_stock: 500, min_stock: 50, packaging_type: 'Bottles' },
+      { id: 'fg_or_25g', name: 'truFLAVR Oregano 25 gms Bottle', code: 'FG-OR-25G', price: 57.28, selling_price: 57.28, current_stock: 500, min_stock: 50, packaging_type: 'Bottles' },
+      { id: 'fg_is_40g', name: 'truFLAVR Italian Seasoning 40 gms Bottle', code: 'FG-IS-40G', price: 63.64, selling_price: 63.64, current_stock: 500, min_stock: 50, packaging_type: 'Bottles' },
+      { id: 'fg_pp_50g', name: 'truFLAVR Peri Peri 50 gms Bottle', code: 'FG-PP-50G', price: 57.28, selling_price: 57.28, current_stock: 500, min_stock: 50, packaging_type: 'Bottles' },
+      { id: 'fg_cpp_50g', name: 'truFLAVR Cheese Peri Peri 50 gms Bottle', code: 'FG-CPP-50G', price: 57.28, selling_price: 57.28, current_stock: 500, min_stock: 50, packaging_type: 'Bottles' },
+      { id: 'fg_bs_10g', name: 'truFLAVR Bombay Sandwich 10 gms Pouch', code: 'FG-BS-10G', price: 5.79, selling_price: 5.79, current_stock: 2000, min_stock: 200, packaging_type: 'Pouches' },
+      { id: 'fg_im_10g', name: 'truFLAVR Italian Mix 10 gms Pouch', code: 'FG-IM-10G', price: 5.79, selling_price: 5.79, current_stock: 2000, min_stock: 200, packaging_type: 'Pouches' },
+      { id: 'fg_pp_10g', name: 'truFLAVR Peri Peri 10 gms Pouch', code: 'FG-PP-10G', price: 5.79, selling_price: 5.79, current_stock: 2000, min_stock: 200, packaging_type: 'Pouches' }
+    ];
+
+    for (const catProd of catalogue) {
+      const catKeywords = catProd.name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !noise.includes(w));
+      let matchCount = 0;
+      keywords.forEach(kw => {
+        if (catKeywords.some(cw => cw.includes(kw) || kw.includes(cw))) matchCount++;
+      });
+      if (matchCount >= 2 || (keywords.length > 0 && matchCount / keywords.length >= 0.5)) {
+        let existing = prods.find(p => p.id === catProd.id);
+        if (!existing) {
+          existing = {
+            id: catProd.id,
+            code: catProd.code,
+            name: catProd.name,
+            price: catProd.price,
+            selling_price: catProd.selling_price,
+            current_stock: catProd.current_stock || 1000,
+            min_stock: catProd.min_stock || 100,
+            packaging_type: catProd.packaging_type || 'Pouches',
+            bom: []
+          };
+          prods.push(existing);
+          this.db.saveOfflineDb();
+          if (this.db.config.isOnline && this.db.supabase) {
+            this.db.supabase.from('products').upsert([existing]).then();
+          }
+        }
+        return existing.id;
+      }
+    }
+
+    return prods.length > 0 ? prods[0].id : '';
   }
 
 
