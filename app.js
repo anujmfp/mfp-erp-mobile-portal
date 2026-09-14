@@ -138,6 +138,9 @@ class DBClient {
             this.seedingInProgress = false;
             return [...this.offlineDb.raw_materials].sort((a, b) => a.name.localeCompare(b.name));
           }
+          // Cache latest cloud raw materials into offline database
+          this.offlineDb.raw_materials = data;
+          this.saveOfflineDb();
           return data;
         }
       } catch (e) {
@@ -145,6 +148,54 @@ class DBClient {
       }
     }
     return [...this.offlineDb.raw_materials].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async insertRawMaterial(material) {
+    if (!material.id) {
+      material.id = 'rm_' + Date.now();
+    }
+    if (!material.code) {
+      const cleanName = (material.name || 'RM').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
+      material.code = 'RM-' + cleanName;
+    }
+    material.current_stock = parseFloat(material.current_stock) || 0;
+    material.unit = material.unit || 'Pieces';
+    material.average_price = parseFloat(material.average_price) || 0;
+    material.min_stock = parseFloat(material.min_stock) || 10.0;
+    material.description = material.description || '';
+
+    if (this.config.isOnline && this.supabase) {
+      try {
+        const payload = {
+          id: material.id,
+          code: material.code,
+          name: material.name,
+          current_stock: material.current_stock,
+          unit: material.unit,
+          average_price: material.average_price,
+          min_stock: material.min_stock,
+          description: material.description
+        };
+        const { data, error } = await this.supabase.from('raw_materials').upsert([payload]).select();
+        if (error) {
+          console.error("Error upserting raw material to Supabase:", error);
+        } else if (data && data[0]) {
+          material = data[0];
+        }
+      } catch (e) {
+        console.error("Exception upserting raw material:", e);
+      }
+    }
+
+    // Always update offline cache
+    const existingIdx = this.offlineDb.raw_materials.findIndex(m => m.id === material.id || m.code === material.code);
+    if (existingIdx !== -1) {
+      this.offlineDb.raw_materials[existingIdx] = material;
+    } else {
+      this.offlineDb.raw_materials.push(material);
+    }
+    this.saveOfflineDb();
+    return material;
   }
 
   async getProducts() {
@@ -161,6 +212,9 @@ class DBClient {
             this.seedingInProgress = false;
             return [...this.offlineDb.products].sort((a, b) => a.name.localeCompare(b.name));
           }
+          // Cache latest cloud products into offline database
+          this.offlineDb.products = data;
+          this.saveOfflineDb();
           return data;
         }
       } catch (e) {
@@ -712,6 +766,10 @@ class MFPMobilePortal {
     if (!this.orderItems[index]) return;
 
     if (field === 'material_id') {
+      if (val === '__NEW__') {
+        this.openAddMaterialModal('order', index);
+        return;
+      }
       this.orderItems[index].material_id = val;
       const materials = await this.db.getRawMaterials();
       const mat = materials.find(m => m.id === val);
@@ -770,6 +828,7 @@ class MFPMobilePortal {
         const isSel = m.id === item.material_id ? 'selected' : '';
         matOptions += `<option value="${m.id}" ${isSel}>${m.name} (${m.code}) - ${m.unit}</option>`;
       });
+      matOptions += `<option value="__NEW__" style="color:var(--color-primary); font-weight:bold;">➕ + Add New Raw Material...</option>`;
 
       const removeBtnHtml = this.orderItems.length > 1
         ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeOrderItemRow(${index})"><i class="fa-solid fa-trash-can"></i> Remove</button>`
@@ -922,6 +981,10 @@ class MFPMobilePortal {
     if (!this.inwardItems[index]) return;
 
     if (field === 'select_source') {
+      if (val === '__NEW__') {
+        this.openAddMaterialModal('inward', index);
+        return;
+      }
       const orders = await this.db.getOrders();
       const materials = await this.db.getRawMaterials();
 
@@ -1027,6 +1090,10 @@ class MFPMobilePortal {
         const isSel = (!item.linked_order_id && item.material_id === m.id) ? 'selected' : '';
         optionsHtml += `<option value="mat_${m.id}" ${isSel}>${m.name} (${m.code}) - ${m.unit}</option>`;
       });
+      optionsHtml += '</optgroup>';
+
+      optionsHtml += '<optgroup label="✨ Create New">';
+      optionsHtml += '<option value="__NEW__" style="color:var(--color-primary); font-weight:bold;">➕ + Add New Raw Material...</option>';
       optionsHtml += '</optgroup>';
 
       const removeBtnHtml = this.inwardItems.length > 1
@@ -1389,6 +1456,7 @@ class MFPMobilePortal {
         const selected = isMatched ? 'selected' : '';
         matOptions += `<option value="${m.id}" ${selected}>${m.name} (${m.code})</option>`;
       });
+      matOptions += `<option value="__NEW__" style="color:var(--color-primary); font-weight:bold;">➕ + Add New Raw Material...</option>`;
 
       // Construct individual order options for this specific line item
       let orderOptions = '<option value="">-- No Link (Direct Inward) --</option>';
@@ -1428,7 +1496,7 @@ class MFPMobilePortal {
       tr.innerHTML = `
         <td>
           <div class="td-bold" style="font-size:0.75rem; margin-bottom:0.2rem;">Extracted: "${item.raw_text_name || 'Line Item'}"</div>
-          <select class="form-control" style="font-size:0.75rem; padding:0.25rem 0.4rem;" onchange="app.updateVerifyInwardItem(${index}, 'material_id', this.value)">
+          <select class="form-control" style="font-size:0.75rem; padding:0.25rem 0.4rem;" onchange="if(this.value==='__NEW__'){app.openAddMaterialModal('verify', ${index});}else{app.updateVerifyInwardItem(${index}, 'material_id', this.value);}">
             ${matOptions}
           </select>
         </td>
@@ -3226,6 +3294,142 @@ class MFPMobilePortal {
     return prods.length > 0 ? prods[0].id : '';
   }
 
+
+  // --- QUICK ADD RAW MATERIAL MODAL & CLOUD SYNC ---
+
+  openAddMaterialModal(context = 'order', targetIndex = 0) {
+    this.addMaterialContext = { context, targetIndex };
+    const nameInput = document.getElementById('q-mat-name');
+    const codeInput = document.getElementById('q-mat-code');
+    const unitSelect = document.getElementById('q-mat-unit');
+    const priceInput = document.getElementById('q-mat-price');
+    const minStockInput = document.getElementById('q-mat-min-stock');
+    const descInput = document.getElementById('q-mat-desc');
+
+    if (nameInput) nameInput.value = '';
+    if (codeInput) codeInput.value = '';
+    if (unitSelect) unitSelect.value = 'Pieces';
+    if (priceInput) priceInput.value = '';
+    if (minStockInput) minStockInput.value = '10';
+    if (descInput) descInput.value = '';
+
+    this.openModal('modal-add-raw-material');
+    if (nameInput) setTimeout(() => nameInput.focus(), 150);
+  }
+
+  async handleQuickAddMaterial(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-save-new-mat');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+    }
+
+    try {
+      const name = document.getElementById('q-mat-name').value.trim();
+      let code = document.getElementById('q-mat-code').value.trim();
+      const unit = document.getElementById('q-mat-unit').value;
+      const price = parseFloat(document.getElementById('q-mat-price').value) || 0;
+      const minStock = parseFloat(document.getElementById('q-mat-min-stock').value) || 10;
+      const desc = document.getElementById('q-mat-desc').value.trim();
+
+      if (!name) {
+        alert("Material name is required.");
+        return;
+      }
+
+      if (!code) {
+        const cleanName = name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
+        code = 'RM-' + cleanName;
+      }
+
+      const newMat = {
+        id: 'rm_' + Date.now(),
+        code: code,
+        name: name,
+        unit: unit,
+        average_price: price,
+        current_stock: 0,
+        min_stock: minStock,
+        description: desc
+      };
+
+      const saved = await this.db.insertRawMaterial(newMat);
+      this.closeModal('modal-add-raw-material');
+
+      const ctx = this.addMaterialContext || { context: 'order', targetIndex: 0 };
+      if (ctx.context === 'order') {
+        const idx = ctx.targetIndex || 0;
+        if (!this.orderItems[idx]) {
+          this.orderItems[idx] = { material_id: '', quantity: 10, target_price: 0 };
+        }
+        this.orderItems[idx].material_id = saved.id;
+        if (saved.average_price && (!this.orderItems[idx].target_price || this.orderItems[idx].target_price === 0)) {
+          this.orderItems[idx].target_price = saved.average_price;
+        }
+        await this.renderOrderItems();
+      } else if (ctx.context === 'inward') {
+        const idx = ctx.targetIndex || 0;
+        if (!this.inwardItems[idx]) {
+          this.inwardItems[idx] = { linked_order_id: '', material_id: '', quantity: 10, rate: 0 };
+        }
+        this.inwardItems[idx].material_id = saved.id;
+        this.inwardItems[idx].linked_order_id = '';
+        if (saved.average_price && (!this.inwardItems[idx].rate || this.inwardItems[idx].rate === 0)) {
+          this.inwardItems[idx].rate = saved.average_price;
+        }
+        await this.renderInwardItems();
+      } else if (ctx.context === 'verify') {
+        const idx = ctx.targetIndex || 0;
+        if (this.currentVerifyInwardItems && this.currentVerifyInwardItems[idx]) {
+          this.currentVerifyInwardItems[idx].material_id = saved.id;
+          if (saved.average_price && !this.currentVerifyInwardItems[idx].rate) {
+            this.currentVerifyInwardItems[idx].rate = saved.average_price;
+          }
+        }
+        await this.renderVerifyInwardTable();
+      } else {
+        await this.refreshAllViews();
+      }
+
+      alert(`✓ Raw material "${saved.name}" (${saved.code}) added successfully!`);
+    } catch (err) {
+      console.error("Error creating raw material:", err);
+      alert("Failed to create raw material: " + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-check"></i> Save & Use Material`;
+      }
+    }
+  }
+
+  async refreshCloudData() {
+    const icon = document.getElementById('sync-icon');
+    if (icon) icon.classList.add('fa-spin');
+
+    if (!this.db.config.isOnline || !this.db.supabase) {
+      if (icon) icon.classList.remove('fa-spin');
+      if (confirm("You are currently in Sandbox Mode (Offline). Would you like to connect your Supabase Cloud Database URL & Anon Key now?")) {
+        this.openSettingsModal();
+      }
+      return;
+    }
+
+    try {
+      const mats = await this.db.getRawMaterials();
+      const prods = await this.db.getProducts();
+      const orders = await this.db.getOrders();
+
+      await this.refreshAllViews();
+      alert(`✓ Cloud Sync Successful!\n• ${mats.length} Raw Materials synced\n• ${prods.length} Products synced\n• ${orders.length} Orders synced`);
+    } catch (err) {
+      console.error("Cloud sync failed:", err);
+      alert("Cloud sync failed: " + err.message);
+    } finally {
+      if (icon) icon.classList.remove('fa-spin');
+    }
+  }
 
   // --- SETTINGS CONFIGURATIONS ---
 

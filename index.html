@@ -7,7 +7,7 @@
   <!-- Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="style.css?v=1.5">
+  <link rel="stylesheet" href="style.css?v=1.6">
   <!-- Supabase JS Client SDK via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Mozilla PDF.js Library via CDN -->
@@ -30,8 +30,13 @@
           <i class="fa-solid fa-leaf"></i>
           <h1>MFP ERP</h1>
         </div>
-        <div class="db-status-badge offline" id="db-status-indicator" onclick="app.openSettingsModal()" title="Database Connection Status. Click to edit settings.">
-          <i class="fa-solid fa-cloud-slash"></i> Offline Mode
+        <div style="display:flex; align-items:center; gap:0.4rem;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-sync-cloud" onclick="app.refreshCloudData()" style="padding:0.25rem 0.55rem; font-size:0.7rem; border-radius:20px; display:flex; align-items:center; gap:0.3rem;" title="Refresh / Pull latest materials from Cloud Database">
+            <i class="fa-solid fa-arrows-rotate" id="sync-icon"></i> <span>Sync</span>
+          </button>
+          <div class="db-status-badge offline" id="db-status-indicator" onclick="app.openSettingsModal()" title="Database Connection Status. Click to edit settings.">
+            <i class="fa-solid fa-cloud-slash"></i> Offline Mode
+          </div>
         </div>
       </header>
 
@@ -59,7 +64,12 @@
             <div style="margin-top:0.65rem;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
                 <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Order Items / Materials *</label>
-                <span id="order-estimated-total" style="font-size:0.75rem; font-weight:700; color:var(--color-success);">Est. Total: Rs. 0.00</span>
+                <div style="display:flex; align-items:center; gap:0.4rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="app.openAddMaterialModal('order')" style="font-size:0.68rem; padding:0.18rem 0.45rem; color:var(--color-primary); border:1px solid rgba(16,185,129,0.4); background:rgba(16,185,129,0.08); font-weight:600;">
+                    <i class="fa-solid fa-plus"></i> New Material
+                  </button>
+                  <span id="order-estimated-total" style="font-size:0.75rem; font-weight:700; color:var(--color-success);">Est. Total: Rs. 0.00</span>
+                </div>
               </div>
               
               <div id="order-items-container">
@@ -168,7 +178,12 @@
               <div style="margin-top:0.65rem;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
                   <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Received Materials (Multiple Items) *</label>
-                  <span id="inward-total-amount" style="font-size:0.75rem; font-weight:700; color:var(--color-success);">Total: Rs. 0.00</span>
+                  <div style="display:flex; align-items:center; gap:0.4rem;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="app.openAddMaterialModal('inward')" style="font-size:0.68rem; padding:0.18rem 0.45rem; color:var(--color-primary); border:1px solid rgba(16,185,129,0.4); background:rgba(16,185,129,0.08); font-weight:600;">
+                      <i class="fa-solid fa-plus"></i> New Material
+                    </button>
+                    <span id="inward-total-amount" style="font-size:0.75rem; font-weight:700; color:var(--color-success);">Total: Rs. 0.00</span>
+                  </div>
                 </div>
 
                 <div id="inward-items-container">
@@ -700,7 +715,71 @@
     </div>
   </div>
 
+  <!-- E. QUICK ADD RAW MATERIAL MODAL -->
+  <div class="modal-overlay" id="modal-add-raw-material">
+    <div class="modal-content" style="max-height: 92vh; max-width: 440px; display:flex; flex-direction:column;">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-box-open" style="color:var(--color-primary);"></i> Add New Raw Material</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-add-raw-material')">&times;</button>
+      </div>
+      <form id="form-add-raw-material" onsubmit="app.handleQuickAddMaterial(event)" style="display:flex; flex-direction:column; flex-grow:1; overflow:hidden;">
+        <div class="modal-body" style="overflow-y:auto; padding:0.85rem; flex-grow:1;">
+          <div class="alert-strip" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); color: var(--color-primary); padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.72rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Adds the item immediately to your catalog and syncs to Supabase Cloud.</span>
+          </div>
+
+          <div class="form-group" style="margin-bottom:0.6rem;">
+            <label style="font-size:0.75rem;">Material / Item Name *</label>
+            <input type="text" class="form-control" id="q-mat-name" placeholder="e.g. Gloss Green Caps 28mm" required autofocus>
+          </div>
+
+          <div class="form-row" style="margin-bottom:0.6rem;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:0.75rem;">Item Code (Optional)</label>
+              <input type="text" class="form-control" id="q-mat-code" placeholder="Auto-generated if blank">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:0.75rem;">Unit of Measure *</label>
+              <select class="form-control" id="q-mat-unit" required>
+                <option value="Pieces" selected>Pieces (pcs)</option>
+                <option value="kg">Kilograms (kg)</option>
+                <option value="grams">Grams (g)</option>
+                <option value="Ltr">Liters (Ltr)</option>
+                <option value="Roll">Rolls</option>
+                <option value="Boxes">Boxes</option>
+                <option value="Sets">Sets</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom:0.6rem;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:0.75rem;">Target Rate (Rs.)</label>
+              <input type="number" step="0.01" min="0" class="form-control" id="q-mat-price" placeholder="0.00">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:0.75rem;">Min Stock Alert</label>
+              <input type="number" step="1" min="0" class="form-control" id="q-mat-min-stock" placeholder="10">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.75rem;">Description / Specs (Optional)</label>
+            <input type="text" class="form-control" id="q-mat-desc" placeholder="e.g. 28mm flip-top neck finish">
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-add-raw-material')">Cancel</button>
+          <button type="submit" id="btn-save-new-mat" class="btn btn-primary" style="width:auto;">
+            <i class="fa-solid fa-check"></i> Save & Use Material
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Logic scripts -->
-  <script src="app.js?v=1.5"></script>
+  <script src="app.js?v=1.6"></script>
 </body>
 </html>

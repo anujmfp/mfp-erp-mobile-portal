@@ -82,6 +82,12 @@ CREATE TABLE IF NOT EXISTS outwards (
     customer TEXT NOT NULL
 );
 
--- Enable Row Level Security (RLS) if desired, or keep open for local scripts
--- For simplicity, let's enable public access or read/write rules
--- You can configure Supabase policies in the Database dashboard under Authentication.
+-- 7. DISABLE ROW LEVEL SECURITY (RLS) FOR DIRECT ACCESS
+-- If RLS is enabled in your Supabase project, run these commands in Supabase SQL Editor
+-- so that your mobile app and desktop portal can read and write tables without permission errors:
+ALTER TABLE raw_materials DISABLE ROW LEVEL SECURITY;
+ALTER TABLE products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
+ALTER TABLE inwards DISABLE ROW LEVEL SECURITY;
+ALTER TABLE productions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE outwards DISABLE ROW LEVEL SECURITY;
