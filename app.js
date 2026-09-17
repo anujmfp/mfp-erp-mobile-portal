@@ -267,6 +267,20 @@ class DBClient {
     return order;
   }
 
+  async deleteOrder(orderId) {
+    if (this.config.isOnline && this.supabase) {
+      try {
+        const { error } = await this.supabase.from('orders').delete().eq('id', orderId);
+        if (error) console.error("Error deleting order from Supabase:", error);
+      } catch (e) {
+        console.error("Exception deleting order from Supabase:", e);
+      }
+    }
+    this.offlineDb.orders = this.offlineDb.orders.filter(o => o.id !== orderId);
+    this.saveOfflineDb();
+    return true;
+  }
+
   async insertInward(inward) {
     inward.id = 'inw_' + Date.now();
     const dateStr = inward.date || new Date().toISOString().split('T')[0];
@@ -733,11 +747,16 @@ class MFPMobilePortal {
           div.className = 'stock-cover-item';
           const dateDisplay = ord.date || (ord.created_at ? ord.created_at.split('T')[0] : 'N/A');
           div.innerHTML = `
-            <div>
+            <div style="flex:1; padding-right:0.5rem;">
               <div class="td-bold" style="font-size:0.85rem;">${ord.material_name}</div>
               <div class="td-muted" style="font-size:0.75rem;">Date: ${dateDisplay} • Qty: ${ord.quantity_requested} • Vendor: ${ord.vendor_name || 'N/A'}</div>
             </div>
-            <span class="badge badge-warning" style="font-size:0.65rem;">Pending</span>
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              <span class="badge badge-warning" style="font-size:0.65rem;">Pending</span>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.deleteOrder('${ord.id}')" title="Delete order created by mistake" style="padding:0.22rem 0.45rem; font-size:0.72rem; color:var(--color-danger); border:1px solid rgba(239, 68, 68, 0.35); background:rgba(239, 68, 68, 0.08); border-radius:4px;">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
           `;
           container.appendChild(div);
         });
@@ -748,6 +767,21 @@ class MFPMobilePortal {
       this.orderItems = [{ material_id: '', quantity: 50, target_price: 0 }];
     }
     await this.renderOrderItems();
+  }
+
+  async deleteOrder(orderId) {
+    const orders = await this.db.getOrders();
+    const ord = orders.find(o => o.id === orderId);
+    const label = ord ? `${ord.material_name} (${ord.quantity_requested} pcs)` : 'this order';
+    if (!confirm(`Delete purchase order for ${label} created by mistake?`)) {
+      return;
+    }
+    await this.db.deleteOrder(orderId);
+    await this.renderOrderPane();
+    if (this.currentVerifyInwardItems) {
+      await this.renderVerifyInwardTable();
+    }
+    alert("✓ Order deleted successfully.");
   }
 
   addOrderItemRow() {
