@@ -604,6 +604,12 @@ class MFPMobilePortal {
     this.returnItems = [];
     this.inwardActiveSubTab = 'raw';
 
+    // Sample Dispatch state
+    this.sampleItems = [];
+    this.currentSampleCategory = 'All';
+    this.currentOutwardSubSection = 'invoice';
+    this.currentSamplePhotoUrl = null;
+
     this.init();
   }
 
@@ -638,7 +644,7 @@ class MFPMobilePortal {
 
   initDateInputs() {
     const today = this.getTodayDate();
-    const dateInputIds = ['order-date', 'inward-date', 'return-date', 'production-date', 'outward-date', 'vi-date', 'vo-date'];
+    const dateInputIds = ['order-date', 'inward-date', 'return-date', 'production-date', 'outward-date', 'sample-date', 'vi-date', 'vo-date'];
     dateInputIds.forEach(id => {
       const el = document.getElementById(id);
       if (el && !el.value) {
@@ -2529,9 +2535,12 @@ class MFPMobilePortal {
         container.appendChild(div);
       });
     }
+
+    // Initialize & render sample dispatch items
+    await this.renderSampleItems();
   }
 
-  // --- SALE OUTWARD DISPATCH: PDF INVOICE PARSING & BATCH PROCESSING ---
+  // --- SALE OUTWARD DISPATCH: PDF INVOICE & PHOTO PARSING & BATCH PROCESSING ---
 
   async handleOutwardUpload(file) {
     if (file) {
@@ -2542,36 +2551,75 @@ class MFPMobilePortal {
   async handleOutwardUploadMultiple(fileList) {
     if (!fileList || fileList.length === 0) return;
 
-    const files = Array.from(fileList).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    const files = Array.from(fileList).filter(f => 
+      f.type === 'application/pdf' || 
+      f.name.toLowerCase().endsWith('.pdf') ||
+      f.type.startsWith('image/') ||
+      /\.(jpe?g|png|gif|bmp|webp)$/i.test(f.name)
+    );
+
     if (files.length === 0) {
-      alert("Please select one or more PDF sales invoice files.");
+      alert("Please select one or more PDF sales invoices or invoice photos/images.");
       return;
     }
 
     this.batchOutwardInvoices = [];
     this.activeBatchOutwardIdx = 0;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      try {
-        const rawText = await this.parsePDFText(file);
-        const extracted = this.heuristicsExtractSale(rawText, file.name);
-        this.batchOutwardInvoices.push({
-          fileName: file.name,
-          invoice_no: extracted.invoice_no,
-          date: extracted.date,
-          customer: extracted.customer || 'Krishna Enterprises',
-          gstin: extracted.gstin || '',
-          net_amount: extracted.net_amount || 0,
-          products: extracted.products
-        });
-      } catch (e) {
-        console.error("Error parsing sales invoice PDF: " + file.name, e);
+    const loadingDiv = document.getElementById('inward-loading-spinner');
+    const spinnerText = document.getElementById('inward-spinner-text');
+    if (loadingDiv) {
+      loadingDiv.style.display = 'flex';
+      if (spinnerText) spinnerText.textContent = `Processing ${files.length} invoice(s)...`;
+    }
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        let rawText = '';
+        let imagePreviewUrl = null;
+
+        if (spinnerText) {
+          spinnerText.textContent = `Scanning invoice ${i + 1}/${files.length} (${file.name})...`;
+        }
+
+        try {
+          if (isPdf) {
+            rawText = await this.parsePDFText(file);
+          } else {
+            imagePreviewUrl = await new Promise((resolve) => {
+              const r = new FileReader();
+              r.onload = () => resolve(r.result);
+              r.onerror = () => resolve(null);
+              r.readAsDataURL(file);
+            });
+            rawText = await this.parseImageText(file);
+          }
+
+          const extracted = this.heuristicsExtractSale(rawText, file.name);
+          this.batchOutwardInvoices.push({
+            fileName: file.name,
+            imagePreviewUrl: imagePreviewUrl,
+            invoice_no: extracted.invoice_no,
+            date: extracted.date,
+            customer: extracted.customer || 'Customer Dispatch',
+            gstin: extracted.gstin || '',
+            net_amount: extracted.net_amount || 0,
+            products: extracted.products
+          });
+        } catch (e) {
+          console.error("Error parsing sales invoice: " + file.name, e);
+        }
+      }
+    } finally {
+      if (loadingDiv) {
+        loadingDiv.style.display = 'none';
       }
     }
 
     if (this.batchOutwardInvoices.length === 0) {
-      alert("Could not extract sales invoice details from the selected PDF(s). Please verify the file format.");
+      alert("Could not extract sales invoice details from the selected file(s). Please verify the file format.");
       return;
     }
 
@@ -2637,6 +2685,22 @@ class MFPMobilePortal {
       }
     }
 
+    // Display photo/image preview thumbnail if available
+    const imgContainer = document.getElementById('vo-image-preview-container');
+    const imgEl = document.getElementById('vo-image-preview');
+    if (imgContainer && imgEl) {
+      if (cur.imagePreviewUrl) {
+        imgEl.src = cur.imagePreviewUrl;
+        imgContainer.style.display = 'block';
+        const wrapper = document.getElementById('vo-image-wrapper');
+        if (wrapper) wrapper.style.display = 'block';
+        const toggleBtn = document.getElementById('vo-photo-toggle-btn');
+        if (toggleBtn) toggleBtn.textContent = 'Collapse';
+      } else {
+        imgContainer.style.display = 'none';
+      }
+    }
+
     const invEl = document.getElementById('vo-invoice');
     if (invEl) invEl.value = cur.invoice_no || '';
 
@@ -2654,7 +2718,21 @@ class MFPMobilePortal {
 
     this.currentVerifyOutwardItems = cur.products;
     this.renderVerifyOutwardRows();
+    this.updateVerifyOutwardSummary();
     this.openModal('modal-verify-outward');
+  }
+
+  toggleOutwardPhotoPreview() {
+    const wrapper = document.getElementById('vo-image-wrapper');
+    const btn = document.getElementById('vo-photo-toggle-btn');
+    if (!wrapper || !btn) return;
+    if (wrapper.style.display === 'none') {
+      wrapper.style.display = 'block';
+      btn.textContent = 'Collapse';
+    } else {
+      wrapper.style.display = 'none';
+      btn.textContent = 'Expand';
+    }
   }
 
   switchBatchOutwardIdx(idx) {
@@ -2731,15 +2809,73 @@ class MFPMobilePortal {
         <td style="font-size:0.8rem; font-weight:600; text-align:right; white-space:nowrap; vertical-align:middle;" id="vo-line-total-${index}">
           Rs. ${lineTotal.toFixed(2)}
         </td>
+        <td style="text-align:center; vertical-align:middle;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.removeVerifyOutwardRow(${index})" style="padding:0.2rem 0.4rem; font-size:0.7rem; color:var(--danger);" title="Remove line item">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  async addVerifyOutwardRow() {
+    const products = await this.db.getProducts();
+    const firstProd = products.length > 0 ? products[0] : { id: '', selling_price: 0, name: 'Finished Good' };
+    this.currentVerifyOutwardItems.push({
+      raw_text_name: firstProd.name || 'New Item',
+      hsn: '',
+      product_id: firstProd.id || '',
+      quantity_sold: 1,
+      rate: firstProd.selling_price || 0,
+      discount: 0,
+      amount: firstProd.selling_price || 0
+    });
+    this.renderVerifyOutwardRows();
+    this.updateVerifyOutwardSummary();
+  }
+
+  removeVerifyOutwardRow(index) {
+    if (this.currentVerifyOutwardItems.length <= 1) {
+      alert("At least one line item is required. Use Discard Invoice if you wish to skip this invoice.");
+      return;
+    }
+    this.currentVerifyOutwardItems.splice(index, 1);
+    this.renderVerifyOutwardRows();
+    this.updateVerifyOutwardSummary();
+  }
+
+  updateVerifyOutwardSummary() {
+    let totalAmt = 0;
+    let totalPcs = 0;
+    if (this.currentVerifyOutwardItems) {
+      this.currentVerifyOutwardItems.forEach(it => {
+        const lineTotal = (it.quantity_sold || 0) * Math.max(0, (it.rate || 0) - (it.discount || 0));
+        totalAmt += lineTotal;
+        totalPcs += (it.quantity_sold || 0);
+      });
+    }
+    const netEl = document.getElementById('vo-net-amount');
+    if (netEl) netEl.innerHTML = `<i class="fa-solid fa-receipt"></i> Net Amount: Rs. ${totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    const countEl = document.getElementById('vo-item-count');
+    if (countEl) countEl.textContent = `${this.currentVerifyOutwardItems.length} item(s) (${totalPcs} pcs)`;
+
+    if (this.batchOutwardInvoices && this.batchOutwardInvoices[this.activeBatchOutwardIdx]) {
+      this.batchOutwardInvoices[this.activeBatchOutwardIdx].net_amount = totalAmt;
+    }
   }
 
   updateVerifyOutwardItem(index, key, val) {
     if (this.currentVerifyOutwardItems[index]) {
       if (key === 'product_id') {
         this.currentVerifyOutwardItems[index].product_id = val;
+        const prod = this.db.offlineDb.products.find(p => p.id === val);
+        if (prod && !this.currentVerifyOutwardItems[index].rate) {
+          this.currentVerifyOutwardItems[index].rate = prod.selling_price || 0;
+          this.renderVerifyOutwardRows();
+          this.updateVerifyOutwardSummary();
+          return;
+        }
       } else if (key === 'rate') {
         this.currentVerifyOutwardItems[index].rate = parseFloat(val) || 0;
       } else if (key === 'discount') {
@@ -2753,6 +2889,7 @@ class MFPMobilePortal {
       item.amount = (item.quantity_sold || 0) * Math.max(0, (item.rate || 0) - (item.discount || 0));
       const totalEl = document.getElementById(`vo-line-total-${index}`);
       if (totalEl) totalEl.textContent = `Rs. ${item.amount.toFixed(2)}`;
+      this.updateVerifyOutwardSummary();
     }
   }
 
@@ -2883,6 +3020,264 @@ class MFPMobilePortal {
     await this.refreshAllViews();
 
     alert(`Batch Commit Successful!\n\nAll ${totalInvoices} sales invoices (${totalLines} total product dispatches) have been recorded and deducted from Finished Goods warehouse.`);
+  }
+
+  // --- SAMPLE DISPATCH (NO INVOICE) WORKFLOW ---
+
+  switchOutwardSubSection(mode) {
+    this.currentOutwardSubSection = mode;
+    const btnInvoice = document.getElementById('btn-outward-invoice');
+    const btnSample = document.getElementById('btn-outward-sample');
+    const secInvoice = document.getElementById('outward-invoice-section');
+    const secSample = document.getElementById('outward-sample-section');
+
+    if (mode === 'sample') {
+      if (btnInvoice) btnInvoice.classList.remove('active');
+      if (btnSample) btnSample.classList.add('active');
+      if (secInvoice) secInvoice.style.display = 'none';
+      if (secSample) secSample.style.display = 'block';
+
+      const sampleDateEl = document.getElementById('sample-date');
+      if (sampleDateEl && !sampleDateEl.value) {
+        sampleDateEl.value = this.getTodayDate();
+      }
+      this.renderSampleItems();
+    } else {
+      if (btnSample) btnSample.classList.remove('active');
+      if (btnInvoice) btnInvoice.classList.add('active');
+      if (secSample) secSample.style.display = 'none';
+      if (secInvoice) secInvoice.style.display = 'block';
+    }
+  }
+
+  switchSampleCategory(cat, btn) {
+    this.currentSampleCategory = cat;
+    const tabBtns = document.querySelectorAll('#sample-cat-tabs .sub-tab-btn');
+    tabBtns.forEach(b => b.classList.remove('active'));
+    if (btn) {
+      btn.classList.add('active');
+    }
+    this.renderSampleItems();
+  }
+
+  async renderSampleItems() {
+    const container = document.getElementById('sample-items-container');
+    if (!container) return;
+
+    const products = await this.db.getProducts();
+    if (this.sampleItems.length === 0) {
+      const firstId = products.length > 0 ? products[0].id : '';
+      this.sampleItems = [{ product_id: firstId, quantity: 1 }];
+    }
+
+    // Filter products if category is selected
+    let filteredProducts = products;
+    if (this.currentSampleCategory && this.currentSampleCategory !== 'All') {
+      const catLower = this.currentSampleCategory.toLowerCase();
+      filteredProducts = products.filter(p => {
+        const pkg = (p.packaging_type || '').toLowerCase();
+        const name = (p.name || '').toLowerCase();
+        if (catLower.startsWith('bottle')) return pkg.includes('bottle') || name.includes('bottle');
+        if (catLower.startsWith('pouch')) return pkg.includes('pouch') || name.includes('pouch');
+        if (catLower.startsWith('sachet')) return pkg.includes('sachet') || name.includes('sachet');
+        return true;
+      });
+      if (filteredProducts.length === 0) {
+        filteredProducts = products;
+      }
+    }
+
+    container.innerHTML = '';
+    let totalQty = 0;
+
+    this.sampleItems.forEach((item, index) => {
+      totalQty += (parseInt(item.quantity, 10) || 0);
+
+      const row = document.createElement('div');
+      row.className = 'sample-item-row';
+      row.style.cssText = 'display:flex; gap:0.4rem; align-items:flex-end; margin-bottom:0.5rem; background:rgba(255,255,255,0.03); padding:0.4rem; border-radius:6px; border:1px solid var(--border-light);';
+
+      let optHtml = '<option value="" disabled ' + (!item.product_id ? 'selected' : '') + '>-- Select SKU --</option>';
+      filteredProducts.forEach(p => {
+        const sel = p.id === item.product_id ? 'selected' : '';
+        const stock = Math.round(parseFloat(p.current_stock || 0));
+        optHtml += `<option value="${p.id}" ${sel}>${p.name} [${p.packaging_type}] (${stock} in stock)</option>`;
+      });
+
+      if (item.product_id && !filteredProducts.some(p => p.id === item.product_id)) {
+        const currP = products.find(p => p.id === item.product_id);
+        if (currP) {
+          const stock = Math.round(parseFloat(currP.current_stock || 0));
+          optHtml = `<option value="${currP.id}" selected>${currP.name} [${currP.packaging_type}] (${stock} in stock)</option>` + optHtml;
+        }
+      }
+
+      row.innerHTML = `
+        <div style="flex: 1; min-width: 0;">
+          <label style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.15rem; display: block;">SKU #${index + 1} *</label>
+          <select class="form-control" style="font-size:0.78rem; padding:0.35rem 0.45rem;" onchange="app.updateSampleItem(${index}, 'product_id', this.value)">
+            ${optHtml}
+          </select>
+        </div>
+        <div style="width: 85px;">
+          <label style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.15rem; display: block;">Pcs *</label>
+          <input type="number" min="1" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.45rem;" value="${item.quantity || 1}" oninput="app.updateSampleItem(${index}, 'quantity', this.value)">
+        </div>
+        <div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.removeSampleItemRow(${index})" ${this.sampleItems.length <= 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''} style="padding:0.35rem 0.55rem; color:var(--danger);" title="Remove SKU">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+
+    const totalEl = document.getElementById('sample-total-qty');
+    if (totalEl) {
+      totalEl.textContent = `${totalQty} pcs total`;
+    }
+  }
+
+  updateSampleItem(idx, field, val) {
+    if (this.sampleItems[idx]) {
+      if (field === 'quantity') {
+        this.sampleItems[idx].quantity = Math.max(1, parseInt(val, 10) || 1);
+        let totalQty = 0;
+        this.sampleItems.forEach(i => totalQty += (parseInt(i.quantity, 10) || 0));
+        const totalEl = document.getElementById('sample-total-qty');
+        if (totalEl) totalEl.textContent = `${totalQty} pcs total`;
+      } else {
+        this.sampleItems[idx].product_id = val;
+      }
+    }
+  }
+
+  addSampleItemRow() {
+    this.sampleItems.push({ product_id: '', quantity: 1 });
+    this.renderSampleItems();
+  }
+
+  removeSampleItemRow(idx) {
+    if (this.sampleItems.length > 1) {
+      this.sampleItems.splice(idx, 1);
+      this.renderSampleItems();
+    }
+  }
+
+  handleSamplePhoto(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      this.currentSamplePhotoUrl = e.target.result;
+      const previewCont = document.getElementById('sample-photo-preview-container');
+      const previewImg = document.getElementById('sample-photo-preview');
+      if (previewCont && previewImg) {
+        previewImg.src = this.currentSamplePhotoUrl;
+        previewCont.style.display = 'block';
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async handleSampleSubmit(e) {
+    e.preventDefault();
+
+    const recipient = (document.getElementById('sample-recipient') ? document.getElementById('sample-recipient').value.trim() : '');
+    const dispatchDate = (document.getElementById('sample-date') && document.getElementById('sample-date').value) || this.getTodayDate();
+    const courier = (document.getElementById('sample-courier') ? document.getElementById('sample-courier').value.trim() : '');
+    const notes = (document.getElementById('sample-notes') ? document.getElementById('sample-notes').value.trim() : '');
+
+    if (!recipient) {
+      alert("Please specify who the sample is dispatched to (Recipient / Customer).");
+      return;
+    }
+
+    if (!this.sampleItems || this.sampleItems.length === 0) {
+      alert("Please add at least one sample SKU to dispatch.");
+      return;
+    }
+
+    const invalidItem = this.sampleItems.find(it => !it.product_id || (parseInt(it.quantity, 10) || 0) <= 0);
+    if (invalidItem) {
+      alert("Please make sure all sample items have a selected SKU and quantity greater than 0.");
+      return;
+    }
+
+    const products = await this.db.getProducts();
+
+    // Check stock cover warnings
+    let warningStr = '';
+    this.sampleItems.forEach(it => {
+      const p = products.find(prod => prod.id === it.product_id);
+      if (p) {
+        const avail = parseFloat(p.current_stock || 0);
+        if (it.quantity > avail) {
+          warningStr += `SKU "${p.name}" stock cover is ${avail} pcs, but dispatch request is ${it.quantity} pcs.\n`;
+        }
+      }
+    });
+
+    if (warningStr) {
+      const proceed = confirm(`Finished Goods Stock Cover Warning:\n\n${warningStr}\nProceed with sample dispatch?`);
+      if (!proceed) return;
+    }
+
+    const sampleRef = 'SAMPLE-' + Math.floor(1000 + Math.random() * 9000);
+    let totalPcs = 0;
+    let itemsTextList = '';
+
+    for (let i = 0; i < this.sampleItems.length; i++) {
+      const it = this.sampleItems[i];
+      const prod = products.find(p => p.id === it.product_id);
+      if (prod) {
+        const qty = parseInt(it.quantity, 10) || 0;
+        totalPcs += qty;
+
+        await this.db.insertOutward({
+          date: dispatchDate,
+          invoice_no: sampleRef,
+          product_id: prod.id,
+          product_name: prod.name,
+          quantity_dispatched: qty,
+          price_billed: 0,
+          customer: `[SAMPLE] ${recipient}`
+        });
+
+        itemsTextList += `${i + 1}. *${prod.name}* (${prod.code})\n` +
+                         `   • Qty: *${qty} pcs* (${prod.packaging_type})\n`;
+      }
+    }
+
+    // Compile WhatsApp Sample Dispatch Note
+    const waText = `🎁 *MFP ERP - Sample Dispatch Note*\n` +
+                   `• *Recipient / Party:* ${recipient}\n` +
+                   `• *Date:* ${dispatchDate}\n` +
+                   (courier ? `• *Courier / Handover:* ${courier}\n` : '') +
+                   (notes ? `• *Purpose / Remarks:* ${notes}\n` : '') +
+                   `• *Sample Ref:* ${sampleRef}\n` +
+                   `• *Total Free Output:* ${totalPcs} pcs across ${this.sampleItems.length} SKU(s)\n\n` +
+                   `*Sample SKUs Dispatched (No Invoice):*\n` +
+                   itemsTextList +
+                   `\n_Stock deducted from Finished Goods warehouse. Logged via MFP Mobile Console._`;
+
+    const waTextEl = document.getElementById('sample-wa-text');
+    const waWidget = document.getElementById('sample-wa-widget');
+    if (waTextEl && waWidget) {
+      waTextEl.value = waText;
+      waWidget.classList.remove('hidden');
+    }
+
+    // Reset form
+    document.getElementById('sample-dispatch-form').reset();
+    this.currentSamplePhotoUrl = null;
+    const previewCont = document.getElementById('sample-photo-preview-container');
+    if (previewCont) previewCont.style.display = 'none';
+
+    this.sampleItems = [{ product_id: (products[0] ? products[0].id : ''), quantity: 1 }];
+    this.initDateInputs();
+
+    await this.refreshAllViews();
+    alert(`Success! Dispatched ${totalPcs} pcs sample across ${itemsTextList ? this.sampleItems.length : 1} SKU(s) to ${recipient} (Ref: ${sampleRef})!\n\nFinished Goods warehouse stock has been deducted.`);
   }
 
   async handleManualOutwardSubmit(e) {

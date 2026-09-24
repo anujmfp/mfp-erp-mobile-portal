@@ -7,7 +7,7 @@
   <!-- Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="style.css?v=1.7">
+  <link rel="stylesheet" href="style.css?v=1.8">
   <!-- Supabase JS Client SDK via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Mozilla PDF.js Library via CDN -->
@@ -406,67 +406,195 @@
       </section>
 
       <!-- ==========================================
-           4. VIEW: OUTWARD Dispatch sales
+           4. VIEW: OUTWARD (SALES INVOICE & SAMPLE DISPATCH)
            ========================================== -->
       <section id="view-outward" class="app-view">
-        <div class="ui-card">
-          <div class="card-title">
-            <span><i class="fa-solid fa-circle-up"></i> Sales Invoice Dispatch</span>
+        <!-- Sub-section selector toggle -->
+        <div class="sub-tabs-bar" style="margin-bottom:0.75rem;">
+          <div class="sub-tab-btn active" id="btn-outward-invoice" onclick="app.switchOutwardSubSection('invoice')">
+            <i class="fa-solid fa-file-invoice"></i> Sales Invoice Dispatch
+          </div>
+          <div class="sub-tab-btn" id="btn-outward-sample" onclick="app.switchOutwardSubSection('sample')">
+            <i class="fa-solid fa-gift"></i> Dispatch Sample (No Invoice)
+          </div>
+        </div>
+
+        <!-- 4A. SUB-SECTION: SALES INVOICE DISPATCH -->
+        <div id="outward-invoice-section">
+          <div class="ui-card">
+            <div class="card-title">
+              <span><i class="fa-solid fa-circle-up"></i> Sales Invoice Dispatch</span>
+            </div>
+
+            <div class="mobile-dropzone" id="outward-dropzone">
+              <div class="dropzone-icon"><i class="fa-solid fa-file-invoice"></i></div>
+              <div class="dropzone-text">
+                <h3>Upload or Snap Sales Invoice</h3>
+                <p>Supports PDF, camera photos, or bill images (single or multi-invoice batch).</p>
+              </div>
+              <div style="display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap; margin-top:0.65rem;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('outward-camera-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-camera"></i> Click Photo
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('outward-file-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-folder-open"></i> Upload PDF / Image
+                </button>
+              </div>
+              <input type="file" id="outward-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleOutwardUpload(this.files[0])">
+              <input type="file" id="outward-file-input" class="hidden" accept=".pdf,image/jpeg,image/png,image/gif,image/bmp,image/webp,.jpg,.jpeg,.png,.gif,.bmp" multiple onchange="app.handleOutwardUploadMultiple(this.files)">
+            </div>
+
+            <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
+
+            <form id="outward-manual-form" onsubmit="app.handleManualOutwardSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Sales Invoice Number *</label>
+                  <input type="text" class="form-control" id="outward-invoice" placeholder="e.g. IN-1002" required>
+                </div>
+                <div class="form-group">
+                  <label>Dispatch Date *</label>
+                  <input type="date" class="form-control" id="outward-date" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Select Product *</label>
+                <select class="form-control" id="outward-product" required>
+                  <!-- Loaded dynamically -->
+                </select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Dispatch Quantity (pcs) *</label>
+                  <input type="number" min="1" class="form-control" id="outward-qty" placeholder="Pieces shipped" required>
+                </div>
+                <div class="form-group">
+                  <label>Unit Price (Rs.) *</label>
+                  <input type="number" min="0" step="0.01" class="form-control" id="outward-price" placeholder="Selling price" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Customer Name *</label>
+                <input type="text" class="form-control" id="outward-customer" placeholder="e.g. FreshMart Distributors" required>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="padding:0.65rem;">
+                <i class="fa-solid fa-truck-dispatch"></i> Dispatch finished goods
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 4B. SUB-SECTION: SAMPLE DISPATCH (NO INVOICE) -->
+        <div id="outward-sample-section" style="display:none;">
+          <div class="ui-card">
+            <div class="card-title">
+              <span><i class="fa-solid fa-gift" style="color:var(--color-warning);"></i> Dispatch Sample (No Invoice)</span>
+            </div>
+
+            <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:0.55rem 0.75rem; margin-bottom:0.75rem; font-size:0.75rem; color:var(--text-main);">
+              <i class="fa-solid fa-circle-info" style="color:var(--color-warning); margin-right:0.35rem;"></i>
+              Record promotional & tasting sample orders dispatched without invoice. Deducts warehouse stock count without billing.
+            </div>
+
+            <form id="sample-dispatch-form" onsubmit="app.handleSampleSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Dispatched To / Recipient *</label>
+                  <input type="text" class="form-control" id="sample-recipient" placeholder="e.g. Reliance Retail Sample / Chef Vikram" required>
+                </div>
+                <div class="form-group">
+                  <label>Dispatch Date *</label>
+                  <input type="date" class="form-control" id="sample-date" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Courier / Handover Ref (Optional)</label>
+                  <input type="text" class="form-control" id="sample-courier" placeholder="e.g. Handed over / DTDC AWB #892">
+                </div>
+                <div class="form-group">
+                  <label>Sample Purpose / Notes (Optional)</label>
+                  <input type="text" class="form-control" id="sample-notes" placeholder="e.g. Tasting trial for menu selection">
+                </div>
+              </div>
+
+              <!-- Quick category filter for packaging type: Bottles / Pouches / Sachet -->
+              <div style="margin-top:0.4rem; margin-bottom:0.3rem;">
+                <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.3rem; display:block;">
+                  Select Packaging Type (Filter SKUs)
+                </label>
+                <div class="sub-tabs-bar" id="sample-cat-tabs" style="margin-bottom:0.5rem;">
+                  <div class="sub-tab-btn active" data-cat="All" onclick="app.switchSampleCategory('All', this)">All SKUs</div>
+                  <div class="sub-tab-btn" data-cat="Bottles" onclick="app.switchSampleCategory('Bottles', this)">🍼 Bottles</div>
+                  <div class="sub-tab-btn" data-cat="Pouches" onclick="app.switchSampleCategory('Pouches', this)">📦 Pouches</div>
+                  <div class="sub-tab-btn" data-cat="Sachets" onclick="app.switchSampleCategory('Sachets', this)">🧂 Sachet</div>
+                </div>
+              </div>
+
+              <!-- Multi-Item Sample SKUs Container -->
+              <div style="margin-top:0.35rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+                  <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Sample Items to Dispatch *</label>
+                  <span id="sample-total-qty" style="font-size:0.75rem; font-weight:700; color:var(--color-warning);">0 pcs total</span>
+                </div>
+
+                <div id="sample-items-container">
+                  <!-- Dynamically populated SKU rows -->
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addSampleItemRow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                  <i class="fa-solid fa-plus"></i> Add Another Sample SKU
+                </button>
+              </div>
+
+              <!-- Optional Photo of Sample Box / Courier Receipt -->
+              <div style="margin-top:0.75rem; padding-top:0.65rem; border-top:1px solid var(--border-light);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <label style="margin:0; font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-camera"></i> Sample Box / Slip Photo (Optional)</label>
+                  <div style="display:flex; gap:0.4rem;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('sample-camera-input').click()" style="font-size:0.72rem; padding:0.2rem 0.45rem;">
+                      <i class="fa-solid fa-camera"></i> Camera
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('sample-file-input').click()" style="font-size:0.72rem; padding:0.2rem 0.45rem;">
+                      <i class="fa-solid fa-folder-open"></i> Upload
+                    </button>
+                  </div>
+                </div>
+                <input type="file" id="sample-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleSamplePhoto(this.files[0])">
+                <input type="file" id="sample-file-input" class="hidden" accept="image/*" onchange="app.handleSamplePhoto(this.files[0])">
+
+                <div id="sample-photo-preview-container" style="display:none; margin-top:0.4rem; text-align:center; background:rgba(0,0,0,0.25); padding:0.35rem; border-radius:6px;">
+                  <img id="sample-photo-preview" src="" alt="Sample Photo" style="max-height:80px; max-width:100%; border-radius:4px; object-fit:contain;">
+                  <div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.15rem;">Sample photo attached</div>
+                </div>
+              </div>
+
+              <button type="submit" id="sample-submit-btn" class="btn btn-primary" style="margin-top:0.85rem; padding:0.7rem; font-weight:700; background:linear-gradient(135deg, #f59e0b, #d97706); border-color:#d97706;">
+                <i class="fa-solid fa-gift"></i> Dispatch Free Sample & Deduct Stock
+              </button>
+            </form>
           </div>
 
-          <div class="mobile-dropzone" id="outward-dropzone">
-            <div class="dropzone-icon"><i class="fa-solid fa-file-invoice"></i></div>
-            <div class="dropzone-text">
-              <h3>Upload Sales Invoice PDF(s)</h3>
-              <p>Supports single or multi-PDF batch upload. Auto-extracts dispatches & deducts FG stock.</p>
+          <!-- Sample WhatsApp Widget -->
+          <div class="ui-card hidden" id="sample-wa-widget" style="margin-top:1rem; border:1px solid rgba(37,211,102,0.35);">
+            <div class="card-title">
+              <span><i class="fa-brands fa-whatsapp" style="color:#25d366;"></i> WhatsApp Sample Dispatch Summary</span>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('outward-file-input').click()" style="margin-top:0.5rem; padding: 0.35rem 0.65rem;">
-              <i class="fa-solid fa-cloud-arrow-up"></i> Browse Invoices (Single / Batch)
-            </button>
-            <input type="file" id="outward-file-input" class="hidden" accept=".pdf" multiple onchange="app.handleOutwardUploadMultiple(this.files)">
+            <textarea id="sample-wa-text" class="wa-textarea" readonly rows="7"></textarea>
+            <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+              <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('sample-wa-text')">
+                <i class="fa-solid fa-copy"></i> Copy Text
+              </button>
+              <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('sample-wa-text')">
+                <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+              </button>
+            </div>
           </div>
-
-          <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
-
-          <form id="outward-manual-form" onsubmit="app.handleManualOutwardSubmit(event)">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Sales Invoice Number *</label>
-                <input type="text" class="form-control" id="outward-invoice" placeholder="e.g. IN-1002" required>
-              </div>
-              <div class="form-group">
-                <label>Dispatch Date *</label>
-                <input type="date" class="form-control" id="outward-date" required>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Select Product *</label>
-              <select class="form-control" id="outward-product" required>
-                <!-- Loaded dynamically -->
-              </select>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Dispatch Quantity (pcs) *</label>
-                <input type="number" min="1" class="form-control" id="outward-qty" placeholder="Pieces shipped" required>
-              </div>
-              <div class="form-group">
-                <label>Unit Price (Rs.) *</label>
-                <input type="number" min="0" step="0.01" class="form-control" id="outward-price" placeholder="Selling price" required>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Customer Name *</label>
-              <input type="text" class="form-control" id="outward-customer" placeholder="e.g. FreshMart Distributors" required>
-            </div>
-
-            <button type="submit" class="btn btn-primary" style="padding:0.65rem;">
-              <i class="fa-solid fa-truck-dispatch"></i> Dispatch finished goods
-            </button>
-          </form>
         </div>
 
         <!-- Finished Goods Stock status card -->
@@ -679,20 +807,40 @@
           <input type="text" class="form-control" id="vo-customer" onchange="app.updateActiveBatchOutwardHeader('customer', this.value)">
         </div>
 
+        <!-- Photo/Image preview thumbnail if available -->
+        <div id="vo-image-preview-container" style="display:none; margin: 0.4rem 0; text-align: center; background: rgba(0,0,0,0.25); padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+            <span style="font-size:0.7rem; color:var(--text-muted);"><i class="fa-solid fa-camera"></i> Captured Invoice Photo</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="app.toggleOutwardPhotoPreview()" style="font-size:0.65rem; padding:0.12rem 0.45rem;" id="vo-photo-toggle-btn">Collapse</button>
+          </div>
+          <div id="vo-image-wrapper">
+            <img id="vo-image-preview" src="" alt="Invoice Photo" style="max-height: 85px; max-width: 100%; border-radius: 4px; object-fit: contain; cursor: pointer;" onclick="window.open(this.src, '_blank')">
+            <div style="font-size:0.62rem; color:var(--text-dim); margin-top:0.15rem;">Tap image to view full size</div>
+          </div>
+        </div>
+
         <div id="vo-summary-strip" style="display:flex; justify-content:space-between; align-items:center; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 6px; padding: 0.45rem 0.75rem; margin-bottom: 0.5rem; font-size: 0.8rem;">
           <span id="vo-net-amount" style="font-weight:700; color:var(--success);"><i class="fa-solid fa-receipt"></i> Net Amount: Rs. 0.00</span>
           <span id="vo-item-count" style="color:var(--text-muted); font-size:0.75rem;">0 items</span>
         </div>
 
-        <div class="table-container" style="margin-top:0.25rem; max-height:240px; border:1px solid var(--border-color); border-radius:6px; overflow-x:auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+          <span style="font-size:0.78rem; font-weight:600; color:var(--text-muted);"><i class="fa-solid fa-boxes-packing"></i> Products Dispatched</span>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.addVerifyOutwardRow()" style="padding:0.22rem 0.55rem; font-size:0.72rem;">
+            <i class="fa-solid fa-plus"></i> Add Line
+          </button>
+        </div>
+
+        <div class="table-container" style="margin-top:0.15rem; max-height:240px; border:1px solid var(--border-color); border-radius:6px; overflow-x:auto;">
           <table class="verify-table">
             <thead>
               <tr>
-                <th style="min-width:140px;">Finished Good SKU *</th>
-                <th style="width:65px;">Qty *</th>
-                <th style="width:75px;">Rate (Rs.)</th>
-                <th style="width:65px;">Disc.</th>
-                <th style="width:75px;">Total</th>
+                <th style="min-width:130px;">Finished Good SKU *</th>
+                <th style="width:60px;">Qty *</th>
+                <th style="width:70px;">Rate (Rs.)</th>
+                <th style="width:55px;">Disc.</th>
+                <th style="width:70px;">Total</th>
+                <th style="width:35px; text-align:center;">Del</th>
               </tr>
             </thead>
             <tbody id="verify-outward-rows">
@@ -780,6 +928,6 @@
   </div>
 
   <!-- Logic scripts -->
-  <script src="app.js?v=1.7"></script>
+  <script src="app.js?v=1.8"></script>
 </body>
 </html>
