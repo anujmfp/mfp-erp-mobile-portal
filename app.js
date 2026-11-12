@@ -73,61 +73,96 @@ class DBClient {
     }
 
     // Cutoff migration to 7-Nov-2026 dataset
-    const CUTOFF_VERSION = (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && MFP_CUTOFF_DATA_7NOV.version) ? MFP_CUTOFF_DATA_7NOV.version : '2026-11-07-v1';
+    const CUTOFF_VERSION = (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && MFP_CUTOFF_DATA_7NOV.version) ? MFP_CUTOFF_DATA_7NOV.version : '2026-11-07-v2';
     const currentVersion = localStorage.getItem('mfp_cutoff_version');
     if (currentVersion !== CUTOFF_VERSION && typeof MFP_CUTOFF_DATA_7NOV !== 'undefined') {
-      console.log("Auto-applying 7-Nov-2026 Cutoff Starting Dataset & purging pre-cutoff operational records...");
-      this.applyCutoff7Nov();
+      console.log("Auto-applying 7-Nov-2026 Cutoff Starting Dataset & purging test/pre-cutoff operational records...");
+      this.applyCutoff7Nov(true);
     } else if (this.offlineDb.raw_materials.length === 0 && this.offlineDb.products.length === 0) {
       this.seedSandboxData();
     }
   }
 
-  applyCutoff7Nov() {
+  applyCutoff7Nov(resetAllOperationalRecords = false) {
     if (typeof MFP_CUTOFF_DATA_7NOV === 'undefined') return;
 
     // 1. Overwrite raw materials & products with exact 7-Nov cutoff stock
     this.offlineDb.raw_materials = JSON.parse(JSON.stringify(MFP_CUTOFF_DATA_7NOV.raw_materials || []));
     this.offlineDb.products = JSON.parse(JSON.stringify(MFP_CUTOFF_DATA_7NOV.products || []));
 
-    // 2. Wipe historical operational records prior to 7-Nov-2026 cutoff
-    const cutoffDate = (MFP_CUTOFF_DATA_7NOV.cutoffDate || '2026-11-07');
-    this.offlineDb.orders = (this.offlineDb.orders || []).filter(o => {
-      const d = (o.date || o.created_at || '').slice(0, 10);
-      return d && d >= cutoffDate;
-    });
-    this.offlineDb.inwards = (this.offlineDb.inwards || []).filter(i => {
-      const d = (i.date || '').slice(0, 10);
-      return d && d >= cutoffDate;
-    });
-    this.offlineDb.productions = (this.offlineDb.productions || []).filter(p => {
-      const d = (p.date || '').slice(0, 10);
-      return d && d >= cutoffDate;
-    });
-    this.offlineDb.outwards = (this.offlineDb.outwards || []).filter(o => {
-      const d = (o.dispatch_date || o.date || '').slice(0, 10);
-      return d && d >= cutoffDate;
-    });
-    this.offlineDb.returns = (this.offlineDb.returns || []).filter(r => {
-      const d = (r.return_date || r.date || '').slice(0, 10);
-      return d && d >= cutoffDate;
-    });
-    this.offlineDb.debit_notes = (this.offlineDb.debit_notes || []).filter(d => {
-      const dt = (d.date || '').slice(0, 10);
-      return dt && dt >= cutoffDate;
-    });
+    // 2. Wipe operational records
+    if (resetAllOperationalRecords) {
+      this.offlineDb.orders = [];
+      this.offlineDb.inwards = [];
+      this.offlineDb.productions = [];
+      this.offlineDb.outwards = [];
+      this.offlineDb.returns = [];
+      this.offlineDb.debit_notes = [];
+    } else {
+      const cutoffDate = (MFP_CUTOFF_DATA_7NOV.cutoffDate || '2026-11-07');
+      this.offlineDb.orders = (this.offlineDb.orders || []).filter(o => {
+        const d = (o.date || o.created_at || '').slice(0, 10);
+        return d && d >= cutoffDate;
+      });
+      this.offlineDb.inwards = (this.offlineDb.inwards || []).filter(i => {
+        const d = (i.date || '').slice(0, 10);
+        return d && d >= cutoffDate;
+      });
+      this.offlineDb.productions = (this.offlineDb.productions || []).filter(p => {
+        const d = (p.date || '').slice(0, 10);
+        return d && d >= cutoffDate;
+      });
+      this.offlineDb.outwards = (this.offlineDb.outwards || []).filter(o => {
+        const d = (o.dispatch_date || o.date || '').slice(0, 10);
+        return d && d >= cutoffDate;
+      });
+      this.offlineDb.returns = (this.offlineDb.returns || []).filter(r => {
+        const d = (r.return_date || r.date || '').slice(0, 10);
+        return d && d >= cutoffDate;
+      });
+      this.offlineDb.debit_notes = (this.offlineDb.debit_notes || []).filter(d => {
+        const dt = (d.date || '').slice(0, 10);
+        return dt && dt >= cutoffDate;
+      });
+    }
 
     this.saveOfflineDb();
-    localStorage.setItem('mfp_cutoff_version', MFP_CUTOFF_DATA_7NOV.version || '2026-11-07-v1');
+    localStorage.setItem('mfp_cutoff_version', MFP_CUTOFF_DATA_7NOV.version || '2026-11-07-v2');
 
-    // 3. Upsert to cloud database if online
+    // 3. Upsert clean schema-compatible records to cloud database if online
     if (this.config.isOnline && this.supabase) {
       try {
-        this.supabase.from('raw_materials').upsert(this.offlineDb.raw_materials).then(({ error }) => {
+        const cleanRMs = this.offlineDb.raw_materials.map(m => ({
+          id: m.id,
+          code: m.code,
+          name: m.name,
+          current_stock: parseFloat(m.current_stock) || 0,
+          unit: m.unit || 'kg',
+          average_price: parseFloat(m.average_price) || 0,
+          min_stock: parseFloat(m.min_stock || m.buffer) || 5.0,
+          description: m.description || ''
+        }));
+
+        const cleanProds = this.offlineDb.products.map(p => ({
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          price: parseFloat(p.price || p.selling_price) || 0,
+          selling_price: parseFloat(p.selling_price || p.price) || 0,
+          current_stock: parseFloat(p.current_stock) || 0,
+          min_stock: parseFloat(p.min_stock || p.buffer) || 10.0,
+          packaging_type: p.packaging_type || 'Bottles',
+          description: p.description || '',
+          bom: p.bom || []
+        }));
+
+        this.supabase.from('raw_materials').upsert(cleanRMs).then(({ error }) => {
           if (error) console.error("Cloud cutoff sync error (raw_materials):", error);
+          else console.log("✓ Cloud raw_materials successfully synced to 7-Nov cutoff balances!");
         });
-        this.supabase.from('products').upsert(this.offlineDb.products).then(({ error }) => {
+        this.supabase.from('products').upsert(cleanProds).then(({ error }) => {
           if (error) console.error("Cloud cutoff sync error (products):", error);
+          else console.log("✓ Cloud products successfully synced to 7-Nov cutoff balances!");
         });
       } catch (e) {
         console.error("Cloud cutoff sync exception:", e);
@@ -3452,8 +3487,7 @@ class MFPMobilePortal {
     const statusEl = document.getElementById('production-checklist-status');
     if (!list) return;
 
-    list.innerHTML = '';
-
+    // Fetch data first before touching DOM to avoid async duplication
     const products = await this.db.getProducts();
     const rawMaterials = await this.db.getRawMaterials();
 
@@ -3479,12 +3513,16 @@ class MFPMobilePortal {
 
     if (matIds.length === 0) {
       list.innerHTML = `<span class="td-muted italic">Add Finished Good SKUs and quantities above to forecast ingredient covers.</span>`;
-      if (statusEl) statusEl.textContent = '0 SKUs evaluated';
+      if (statusEl) {
+        statusEl.textContent = '0 SKUs evaluated';
+        statusEl.style.color = 'var(--text-dim)';
+      }
       return;
     }
 
     let hasShortage = false;
     let deficitCount = 0;
+    const fragment = document.createDocumentFragment();
 
     matIds.forEach(matId => {
       const mat = rawMaterials.find(m => m.id === matId);
@@ -3514,8 +3552,12 @@ class MFPMobilePortal {
           ${isShort ? '<strong style="color:var(--color-danger); margin-left:0.25rem;">⚠️ Deficit</strong>' : '<strong style="color:var(--color-success); margin-left:0.25rem;">✓ OK</strong>'}
         </div>
       `;
-      list.appendChild(itemDiv);
+      fragment.appendChild(itemDiv);
     });
+
+    // Atomic DOM replacement - eliminates duplicate items
+    list.innerHTML = '';
+    list.appendChild(fragment);
 
     if (statusEl) {
       statusEl.textContent = hasShortage 
@@ -5044,12 +5086,12 @@ class MFPMobilePortal {
   }
 
   applyCutoff7NovData() {
-    if (!confirm("Are you sure you want to reset your inventory to the 7th November 2026 Cutoff Starting Dataset? Pre-cutoff operational records will be purged.")) {
+    if (!confirm("Are you sure you want to reset your inventory to the 7th November 2026 Cutoff Starting Dataset? Pre-cutoff operational records will be purged, and starting opening stock (including 47.5 kg Chilli Regular) will be restored.")) {
       return;
     }
-    this.db.applyCutoff7Nov();
+    this.db.applyCutoff7Nov(true);
     this.refreshAllViews();
-    alert("✓ Successfully loaded 7-Nov-2026 Cutoff Starting Stock (100 items: 78 Raw Materials/Packaging + 22 Finished Goods)!");
+    alert("✓ Successfully loaded 7-Nov-2026 Cutoff Starting Stock (100 items: 78 Raw Materials/Packaging + 22 Finished Goods)!\n\nChilli Regular restored to 47.5 Kgs and Pouch Roll to 92,000 Pcs.");
   }
 
   resetLocalStorage() {
