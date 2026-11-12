@@ -859,11 +859,15 @@ class MFPMobilePortal {
   }
 
   async init() {
-    // Navigation listeners
-    document.querySelectorAll('.bottom-nav .nav-tab').forEach(tab => {
-      tab.addEventListener('click', (e) => {
-        const viewId = e.currentTarget.getAttribute('data-target');
-        this.switchView(viewId, e.currentTarget);
+    this.currentView = 'view-order';
+
+    // Prevent virtual keyboards / enter key from unintentionally submitting forms on mobile
+    document.querySelectorAll('form').forEach(form => {
+      form.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'submit') {
+          e.preventDefault();
+          e.target.blur();
+        }
       });
     });
 
@@ -874,10 +878,17 @@ class MFPMobilePortal {
   }
 
   switchView(viewId, tabElement) {
+    if (this.currentView === viewId) {
+      // Already on this view - do not re-render and lose user's active inputs
+      return;
+    }
+    this.currentView = viewId;
+
     document.querySelectorAll('.app-view').forEach(view => {
       view.classList.remove('active');
     });
-    document.getElementById(viewId).classList.add('active');
+    const targetView = document.getElementById(viewId);
+    if (targetView) targetView.classList.add('active');
 
     if (tabElement) {
       document.querySelectorAll('.bottom-nav .nav-tab').forEach(t => t.classList.remove('active'));
@@ -1025,9 +1036,9 @@ class MFPMobilePortal {
   async renderOrderItems() {
     const container = document.getElementById('order-items-container');
     if (!container) return;
-    container.innerHTML = '';
 
     const materials = await this.db.getRawMaterials();
+    const fragment = document.createDocumentFragment();
 
     this.orderItems.forEach((item, index) => {
       const box = document.createElement('div');
@@ -1072,8 +1083,11 @@ class MFPMobilePortal {
           Subtotal: <strong id="order-item-subtotal-${index}" style="margin-left:0.35rem; color:var(--text-color);">Rs. ${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
         </div>
       `;
-      container.appendChild(box);
+      fragment.appendChild(box);
     });
+
+    container.innerHTML = '';
+    container.appendChild(fragment);
 
     this.calculateOrderEstimatedTotal();
 
@@ -1264,11 +1278,11 @@ class MFPMobilePortal {
   async renderInwardItems() {
     const container = document.getElementById('inward-items-container');
     if (!container) return;
-    container.innerHTML = '';
 
     const orders = await this.db.getOrders();
     const pendingOrders = orders.filter(o => o.status === 'Pending');
     const materials = await this.db.getRawMaterials();
+    const fragment = document.createDocumentFragment();
 
     this.inwardItems.forEach((item, index) => {
       const box = document.createElement('div');
@@ -1346,8 +1360,11 @@ class MFPMobilePortal {
           Line Total: <strong id="inward-item-subtotal-${index}" style="margin-left:0.35rem; color:var(--text-color);">Rs. ${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
         </div>
       `;
-      container.appendChild(box);
+      fragment.appendChild(box);
     });
+
+    container.innerHTML = '';
+    container.appendChild(fragment);
 
     this.calculateInwardTotal();
 
@@ -2861,10 +2878,10 @@ class MFPMobilePortal {
   async renderReturnItems() {
     const container = document.getElementById('return-items-container');
     if (!container) return;
-    container.innerHTML = '';
 
     const products = await this.db.getProducts();
     const categories = ['Bottles', 'Pouches', 'Sachets', 'Horeca'];
+    const fragment = document.createDocumentFragment();
 
     this.returnItems.forEach((item, index) => {
       const box = document.createElement('div');
@@ -2931,8 +2948,11 @@ class MFPMobilePortal {
           </div>
         </div>
       `;
-      container.appendChild(box);
+      fragment.appendChild(box);
     });
+
+    container.innerHTML = '';
+    container.appendChild(fragment);
 
     const totalPcs = this.returnItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
     const badge = document.getElementById('return-total-qty');
@@ -3209,9 +3229,14 @@ class MFPMobilePortal {
     if (!this.productionItems || this.productionItems.length === 0) {
       const products = await this.db.getProducts();
       this.productionItems = [{ product_id: (products[0] ? products[0].id : ''), quantity: 50 }];
+      await this.renderProductionItems();
+    } else {
+      const container = document.getElementById('production-items-container');
+      if (container && container.children.length === 0) {
+        await this.renderProductionItems();
+      }
     }
 
-    await this.renderProductionItems();
     await this.updateAggregatedRecipeChecklist();
   }
 
@@ -3220,9 +3245,113 @@ class MFPMobilePortal {
     
     document.querySelectorAll('.sub-tabs-bar .sub-tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
+    // Category filter sets default packaging for newly added SKUs; does not destructively rebuild existing entered rows
+  }
 
-    this.renderProductionItems();
-    this.updateAggregatedRecipeChecklist();
+  createProductionRowElement(item, index, products) {
+    const box = document.createElement('div');
+    box.className = 'multi-item-box';
+    box.setAttribute('data-production-index', index);
+
+    // Group products by packaging category
+    const categories = ['Bottles', 'Pouches', 'Sachets', 'Horeca'];
+
+    let optionsHtml = '<option value="" disabled selected>-- Select Product SKU --</option>';
+
+    categories.forEach(cat => {
+      const catProds = products.filter(p => p.packaging_type === cat);
+      if (catProds.length > 0) {
+        optionsHtml += `<optgroup label="📦 ${cat}">`;
+        catProds.forEach(p => {
+          const isSel = item.product_id === p.id ? 'selected' : '';
+          optionsHtml += `<option value="${p.id}" ${isSel}>${p.name} (${p.code})</option>`;
+        });
+        optionsHtml += `</optgroup>`;
+      }
+    });
+
+    // Products without matching standard category
+    const otherProds = products.filter(p => !categories.includes(p.packaging_type));
+    if (otherProds.length > 0) {
+      optionsHtml += `<optgroup label="Other Products">`;
+      otherProds.forEach(p => {
+        const isSel = item.product_id === p.id ? 'selected' : '';
+        optionsHtml += `<option value="${p.id}" ${isSel}>${p.name} (${p.code})</option>`;
+      });
+      optionsHtml += `</optgroup>`;
+    }
+
+    const showRemove = this.productionItems.length > 1;
+
+    box.innerHTML = `
+      <div class="multi-item-header">
+        <span class="production-sku-header-title"><i class="fa-solid fa-tag"></i> Finished Good SKU #${index + 1}</span>
+        <button type="button" class="multi-item-remove-btn" onclick="app.removeProductionSKURow(${index})" style="display:${showRemove ? 'inline-flex' : 'none'};"><i class="fa-solid fa-trash-can"></i> Remove</button>
+      </div>
+      <div class="form-group" style="margin-bottom:0.45rem;">
+        <select class="form-control prod-sku-select" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateProductionSKU(${index}, 'product_id', this.value)" required>
+          ${optionsHtml}
+        </select>
+      </div>
+      <div class="form-row" style="margin-bottom:0.25rem;">
+        <div class="form-group" style="margin-bottom:0; flex:1;">
+          <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Batch Qty (pcs) *</label>
+          <input type="number" step="1" min="1" class="form-control prod-qty-input" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.quantity || ''}" placeholder="Pieces" oninput="app.updateProductionSKU(${index}, 'quantity', this.value)" required>
+        </div>
+      </div>
+    `;
+    return box;
+  }
+
+  appendSingleProductionRow(item, index, products) {
+    const container = document.getElementById('production-items-container');
+    if (!container) return;
+
+    const box = this.createProductionRowElement(item, index, products);
+    container.appendChild(box);
+    this.refreshProductionRemoveButtons();
+
+    try {
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (_) {}
+  }
+
+  refreshProductionRemoveButtons() {
+    const container = document.getElementById('production-items-container');
+    if (!container) return;
+    const boxes = container.querySelectorAll('.multi-item-box');
+    boxes.forEach(box => {
+      const removeBtn = box.querySelector('.multi-item-remove-btn');
+      if (removeBtn) {
+        removeBtn.style.display = boxes.length > 1 ? 'inline-flex' : 'none';
+      }
+    });
+  }
+
+  reindexProductionRows() {
+    const container = document.getElementById('production-items-container');
+    if (!container) return;
+    const boxes = container.querySelectorAll('.multi-item-box');
+    boxes.forEach((box, idx) => {
+      box.setAttribute('data-production-index', idx);
+      const title = box.querySelector('.production-sku-header-title');
+      if (title) {
+        title.innerHTML = `<i class="fa-solid fa-tag"></i> Finished Good SKU #${idx + 1}`;
+      }
+      const removeBtn = box.querySelector('.multi-item-remove-btn');
+      if (removeBtn) {
+        removeBtn.setAttribute('onclick', `app.removeProductionSKURow(${idx})`);
+        removeBtn.style.display = boxes.length > 1 ? 'inline-flex' : 'none';
+      }
+      const select = box.querySelector('.prod-sku-select');
+      if (select) {
+        select.setAttribute('onchange', `app.updateProductionSKU(${idx}, 'product_id', this.value)`);
+      }
+      const qtyInput = box.querySelector('.prod-qty-input');
+      if (qtyInput) {
+        qtyInput.setAttribute('oninput', `app.updateProductionSKU(${idx}, 'quantity', this.value)`);
+      }
+    });
   }
 
   async addProductionSKURow() {
@@ -3232,20 +3361,46 @@ class MFPMobilePortal {
       : products.filter(p => p.packaging_type === this.currentProductionCategory);
     const defaultProd = filtered[0] || products[0];
 
-    this.productionItems.push({
+    const newItem = {
       product_id: defaultProd ? defaultProd.id : '',
       quantity: 50
-    });
+    };
+    this.productionItems.push(newItem);
 
-    await this.renderProductionItems();
-    await this.updateAggregatedRecipeChecklist();
+    // Smooth single row append - no screen refresh, no loss of typed inputs
+    this.appendSingleProductionRow(newItem, this.productionItems.length - 1, products);
+    this.updateProductionSummary();
+    this.scheduleDebouncedAggregatedChecklist();
   }
 
   removeProductionSKURow(index) {
-    if (this.productionItems.length > 1) {
-      this.productionItems.splice(index, 1);
-      this.renderProductionItems();
-      this.updateAggregatedRecipeChecklist();
+    if (this.productionItems.length <= 1) return;
+
+    this.productionItems.splice(index, 1);
+
+    const container = document.getElementById('production-items-container');
+    if (container) {
+      const boxes = container.querySelectorAll('.multi-item-box');
+      if (boxes[index]) {
+        boxes[index].remove();
+      }
+      this.reindexProductionRows();
+    }
+
+    this.updateProductionSummary();
+    this.scheduleDebouncedAggregatedChecklist();
+  }
+
+  updateProductionSummary() {
+    const totalPcs = this.productionItems.reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0);
+    const totalQtyBadge = document.getElementById('production-total-qty');
+    if (totalQtyBadge) {
+      totalQtyBadge.textContent = `${totalPcs} pcs total`;
+    }
+
+    const submitBtn = document.getElementById('production-submit-btn');
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-gears"></i> Record Daily Batch (${totalPcs} pcs across ${this.productionItems.length} SKUs)`;
     }
   }
 
@@ -3258,93 +3413,37 @@ class MFPMobilePortal {
       this.productionItems[index].quantity = parseInt(val, 10) || 0;
     }
 
-    const totalPcs = this.productionItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
-    const totalQtyBadge = document.getElementById('production-total-qty');
-    if (totalQtyBadge) {
-      totalQtyBadge.textContent = `${totalPcs} pcs total`;
-    }
+    this.updateProductionSummary();
+    this.scheduleDebouncedAggregatedChecklist();
+  }
 
-    const submitBtn = document.getElementById('production-submit-btn');
-    if (submitBtn) {
-      submitBtn.innerHTML = `<i class="fa-solid fa-gears"></i> Record Daily Batch (${totalPcs} pcs across ${this.productionItems.length} SKUs)`;
+  scheduleDebouncedAggregatedChecklist() {
+    if (this._recipeDebounceTimer) {
+      clearTimeout(this._recipeDebounceTimer);
     }
-
-    this.updateAggregatedRecipeChecklist();
+    this._recipeDebounceTimer = setTimeout(() => {
+      this.updateAggregatedRecipeChecklist();
+    }, 250);
   }
 
   async renderProductionItems() {
     const container = document.getElementById('production-items-container');
     if (!container) return;
-    container.innerHTML = '';
 
+    // Fetch products first so container is NOT wiped before data is ready
     const products = await this.db.getProducts();
 
-    // Group products by packaging category
-    const categories = ['Bottles', 'Pouches', 'Sachets', 'Horeca'];
-
+    const fragment = document.createDocumentFragment();
     this.productionItems.forEach((item, index) => {
-      const box = document.createElement('div');
-      box.className = 'multi-item-box';
-
-      let optionsHtml = '<option value="" disabled selected>-- Select Product SKU --</option>';
-
-      categories.forEach(cat => {
-        const catProds = products.filter(p => p.packaging_type === cat);
-        if (catProds.length > 0) {
-          optionsHtml += `<optgroup label="📦 ${cat}">`;
-          catProds.forEach(p => {
-            const isSel = item.product_id === p.id ? 'selected' : '';
-            optionsHtml += `<option value="${p.id}" ${isSel}>${p.name} (${p.code})</option>`;
-          });
-          optionsHtml += `</optgroup>`;
-        }
-      });
-
-      // Products without matching standard category
-      const otherProds = products.filter(p => !categories.includes(p.packaging_type));
-      if (otherProds.length > 0) {
-        optionsHtml += `<optgroup label="Other Products">`;
-        otherProds.forEach(p => {
-          const isSel = item.product_id === p.id ? 'selected' : '';
-          optionsHtml += `<option value="${p.id}" ${isSel}>${p.name} (${p.code})</option>`;
-        });
-        optionsHtml += `</optgroup>`;
-      }
-
-      const removeBtnHtml = this.productionItems.length > 1
-        ? `<button type="button" class="multi-item-remove-btn" onclick="app.removeProductionSKURow(${index})"><i class="fa-solid fa-trash-can"></i> Remove</button>`
-        : '';
-
-      box.innerHTML = `
-        <div class="multi-item-header">
-          <span><i class="fa-solid fa-tag"></i> Finished Good SKU #${index + 1}</span>
-          ${removeBtnHtml}
-        </div>
-        <div class="form-group" style="margin-bottom:0.45rem;">
-          <select class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateProductionSKU(${index}, 'product_id', this.value)" required>
-            ${optionsHtml}
-          </select>
-        </div>
-        <div class="form-row" style="margin-bottom:0.25rem;">
-          <div class="form-group" style="margin-bottom:0; flex:1;">
-            <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Batch Qty (pcs) *</label>
-            <input type="number" step="1" min="1" class="form-control" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.quantity || ''}" placeholder="Pieces" oninput="app.updateProductionSKU(${index}, 'quantity', this.value)" required>
-          </div>
-        </div>
-      `;
-      container.appendChild(box);
+      const box = this.createProductionRowElement(item, index, products);
+      fragment.appendChild(box);
     });
 
-    const totalPcs = this.productionItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
-    const totalQtyBadge = document.getElementById('production-total-qty');
-    if (totalQtyBadge) {
-      totalQtyBadge.textContent = `${totalPcs} pcs total`;
-    }
+    // Atomic replacement - prevents race conditions, duplicated DOM elements and blank screen flicker
+    container.innerHTML = '';
+    container.appendChild(fragment);
 
-    const submitBtn = document.getElementById('production-submit-btn');
-    if (submitBtn) {
-      submitBtn.innerHTML = `<i class="fa-solid fa-gears"></i> Record Daily Batch (${totalPcs} pcs across ${this.productionItems.length} SKUs)`;
-    }
+    this.updateProductionSummary();
   }
 
   // Pre-production forecast: aggregates BOM raw materials across ALL active SKUs
