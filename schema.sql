@@ -82,7 +82,23 @@ CREATE TABLE IF NOT EXISTS outwards (
     customer TEXT NOT NULL
 );
 
--- 7. DISABLE ROW LEVEL SECURITY (RLS) FOR DIRECT ACCESS
+-- 7. VENDOR DEBIT NOTES (DEFECTIVE MATERIAL RETURNED TO SUPPLIER)
+CREATE TABLE IF NOT EXISTS debit_notes (
+    id TEXT PRIMARY KEY,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    debit_note_no TEXT NOT NULL,
+    date DATE NOT NULL,
+    vendor_name TEXT NOT NULL,
+    original_invoice_no TEXT,
+    items JSONB DEFAULT '[]'::jsonb,
+    total_amount NUMERIC NOT NULL DEFAULT 0.0,
+    tax_amount NUMERIC DEFAULT 0.0,
+    grand_total NUMERIC NOT NULL DEFAULT 0.0,
+    notes TEXT,
+    photo_url TEXT
+);
+
+-- 8. DISABLE ROW LEVEL SECURITY (RLS) FOR DIRECT ACCESS
 -- If RLS is enabled in your Supabase project, run these commands in Supabase SQL Editor
 -- so that your mobile app and desktop portal can read and write tables without permission errors:
 ALTER TABLE raw_materials DISABLE ROW LEVEL SECURITY;
@@ -91,3 +107,4 @@ ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
 ALTER TABLE inwards DISABLE ROW LEVEL SECURITY;
 ALTER TABLE productions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE outwards DISABLE ROW LEVEL SECURITY;
+ALTER TABLE debit_notes DISABLE ROW LEVEL SECURITY;
