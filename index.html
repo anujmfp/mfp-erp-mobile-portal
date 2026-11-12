@@ -3,2141 +3,1291 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MFP ERP | Consolidated Operations & Finance Engine</title>
+  <title>MFP ERP | Mobile Daily Portal</title>
   <!-- Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="style.css?v=2.2">
-  <!-- Mozilla PDF.js Library via CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-  <!-- SheetJS Excel Library (local with CDN fallback) -->
-  <script src="xlsx.full.min.js"></script>
-  <script>if (typeof XLSX === 'undefined') document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');</script>
-  <!-- Chart.js to build visual financial dashboards -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="style.css?v=2.0">
   <!-- Supabase JS Client SDK via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Mozilla PDF.js Library via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <!-- Embedded Assets for Canvas & Offline PDF -->
   <script src="assets.js?v=2.6"></script>
-  <!-- 7th November 2026 Cutoff Starting Stock Dataset -->
+  <!-- 7th November 2026 Cutoff Starting Inventory Dataset -->
   <script src="cutoff-data-7nov.js"></script>
-  <!-- html2pdf.js for client-side signed PDF generation (offline-first with CDN fallback) -->
+  <!-- html2pdf.js library for signed PDF generation (offline-first with CDN fallback) -->
   <script src="html2pdf.bundle.min.js"></script>
   <script>if (typeof html2pdf === 'undefined') document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>');</script>
-  <!-- Tesseract.js for browser OCR text extraction from images -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <!-- SheetJS Library for Offline Excel Export -->
+  <script src="xlsx.full.min.js"></script>
+  <script>if (typeof XLSX === 'undefined') document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');</script>
+  <!-- Tesseract.js OCR Engine via CDN for Image/Photo text extraction -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
 
-  <div class="app-container">
+  <!-- Phone Device Frame Simulator -->
+  <div class="phone-simulator">
+    <div class="phone-notch"></div>
     
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar">
-      <div class="logo-container">
-        <div class="logo-icon">M</div>
-        <div class="logo-text">MFP ERP</div>
-      </div>
+    <!-- Phone Screen viewport -->
+    <div class="phone-screen">
       
-      <!-- FINANCE SECTION -->
-      <div class="nav-section-title">Finance Engine</div>
-      <ul class="nav-menu">
-        <li class="nav-item active" data-view="finance-dashboard-view">
-          <i class="fa-solid fa-chart-pie"></i>
-          <span>Finance Dashboard</span>
-        </li>
-        <li class="nav-item" data-view="monthly-ledger-view">
-          <i class="fa-solid fa-file-invoice-dollar"></i>
-          <span>Monthly Ledger</span>
-        </li>
-        <li class="nav-item" data-view="employee-directory-view">
-          <i class="fa-solid fa-users-gear"></i>
-          <span>Employee Directory</span>
-        </li>
-      </ul>
-
-      <!-- OPERATIONS SECTION -->
-      <div class="nav-section-title">Operations & Stock</div>
-      <ul class="nav-menu">
-        <li class="nav-item" data-view="dashboard-view">
-          <i class="fa-solid fa-chart-line"></i>
-          <span>Operational Board</span>
-        </li>
-        <li class="nav-item" data-view="raw-materials-view">
-          <i class="fa-solid fa-boxes-stacked"></i>
-          <span>Raw Materials</span>
-        </li>
-        <li class="nav-item" data-view="finished-goods-view">
-          <i class="fa-solid fa-warehouse"></i>
-          <span>Finished Goods</span>
-        </li>
-        <li class="nav-item" data-view="products-view">
-          <i class="fa-solid fa-sitemap"></i>
-          <span>Products & BOM</span>
-        </li>
-        <li class="nav-item" data-view="purchase-view">
-          <i class="fa-solid fa-file-arrow-up"></i>
-          <span>Purchase PDF</span>
-        </li>
-        <li class="nav-item" data-view="sale-view">
-          <i class="fa-solid fa-receipt"></i>
-          <span>Sale Invoice</span>
-        </li>
-        <li class="nav-item" data-view="debit-notes-view">
-          <i class="fa-solid fa-file-circle-minus"></i>
-          <span>Debit Notes</span>
-        </li>
-        <li class="nav-item" data-view="history-view">
-          <i class="fa-solid fa-clock-rotate-left"></i>
-          <span>Activity Logs</span>
-        </li>
-        <li class="nav-item" data-view="inventory-reconciliation-view" style="border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); margin-top: 0.35rem; border-radius: 6px;">
-          <i class="fa-solid fa-scale-balanced" style="color: #10b981;"></i>
-          <span style="font-weight: 700; color: #10b981;">Stock Cutover & Rec</span>
-        </li>
-      </ul>
-
-      <!-- MOBILE CONSOLE SECTION -->
-      <div class="nav-section-title">Processing Head</div>
-      <ul class="nav-menu">
-        <li class="nav-item" data-view="mobile-console-view" style="border: 1px solid rgba(16, 185, 129, 0.3); background-color: rgba(16, 185, 129, 0.03);">
-          <i class="fa-solid fa-mobile-screen-button" style="color: var(--color-primary);"></i>
-          <span style="font-weight: 600;">Daily Mobile Console</span>
-        </li>
-        <li class="nav-item" data-view="settings-view">
-          <i class="fa-solid fa-sliders"></i>
-          <span>System Settings</span>
-        </li>
-      </ul>
-      
-      <div class="sidebar-footer">
-        <div class="system-status">
-          <div class="status-dot"></div>
-          <span>MFP Engine Active</span>
+      <!-- Top Brand Header -->
+      <header class="app-header">
+        <div class="app-brand">
+          <i class="fa-solid fa-leaf"></i>
+          <h1>MFP ERP</h1>
         </div>
-      </div>
-    </aside>
-
-    <!-- Main Content Area -->
-    <main class="main-content">
-      
-      <!-- ==========================================
-           1. FINANCE DASHBOARD VIEW
-           ========================================== -->
-      <section id="finance-dashboard-view" class="view-panel active">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Finance Dashboard</h1>
-            <p>Summary of Sales Revenue, Expenses, Net Profits, and Capital Infusions.</p>
-          </div>
-          <div class="header-actions">
-            <!-- Load Mock Data -->
-            <button class="btn btn-secondary" onclick="app.generateFinanceDemoData()">
-              <i class="fa-solid fa-wand-magic-sparkles"></i> Load Finance Sandbox
-            </button>
-            <!-- Upload monthly excel file -->
-            <div class="file-upload-wrapper" style="position:relative; overflow:hidden; display:inline-block;">
-              <button class="btn btn-primary" onclick="document.getElementById('excel-file-input').click()">
-                <i class="fa-solid fa-file-excel"></i> Upload Monthly Excel
-              </button>
-              <input type="file" id="excel-file-input" class="hidden-file-input" accept=".xlsx, .xls, .csv" onchange="app.importMonthlyExcel(event)">
-            </div>
-          </div>
-        </div>
-
-        <!-- Metric KPI Cards -->
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-info">
-              <h3>Sales Revenue (Excel)</h3>
-              <div class="metric-value" id="fin-metric-sales">Rs. 0.00</div>
-              <div class="metric-trend trend-up">
-                <i class="fa-solid fa-arrow-trend-up"></i> Inflow receipts
-              </div>
-            </div>
-            <div class="metric-icon green"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
-          </div>
-
-          <div class="metric-card">
-            <div class="metric-info">
-              <h3>Operating Expenses</h3>
-              <div class="metric-value" id="fin-metric-expenses">Rs. 0.00</div>
-              <div class="metric-trend trend-down">
-                <i class="fa-solid fa-arrow-trend-down"></i> Operating debits (Excl. Capital Infusion)
-              </div>
-            </div>
-            <div class="metric-icon red"><i class="fa-solid fa-arrow-down-left-and-arrow-up-right-to-center"></i></div>
-          </div>
-
-          <div class="metric-card">
-            <div class="metric-info">
-              <h3>Net Profit / (Loss)</h3>
-              <div class="metric-value" id="fin-metric-profit">Rs. 0.00</div>
-              <div class="metric-trend" id="fin-metric-profit-trend">
-                <i class="fa-solid fa-scale-balanced"></i> Sales Revenue minus Operating Expenses
-              </div>
-            </div>
-            <div class="metric-icon blue"><i class="fa-solid fa-scale-balanced"></i></div>
-          </div>
-
-          <div class="metric-card" style="border: 1px dashed var(--color-secondary); background: rgba(124, 58, 237, 0.02);">
-            <div class="metric-info">
-              <h3>Capital Infusion</h3>
-              <div class="metric-value" id="fin-metric-infusions" style="color: var(--color-secondary);">Rs. 0.00</div>
-              <div class="metric-trend" style="color: var(--color-secondary);">
-                <i class="fa-solid fa-hand-holding-dollar"></i> Financing Inflow (Excluded from Expenses & Costs)
-              </div>
-            </div>
-            <div class="metric-icon purple"><i class="fa-solid fa-coins"></i></div>
-          </div>
-        </div>
-
-        <div class="dashboard-grid">
-          <!-- Monthly Chart -->
-          <div class="chart-card">
-            <div class="card-title-bar">
-              <h2>Sales Revenue vs. Expenses Trend</h2>
-            </div>
-            <div style="position:relative; height: 320px; width: 100%;">
-              <canvas id="finance-trend-chart"></canvas>
-            </div>
-          </div>
-
-          <!-- Category Costs Split -->
-          <div class="chart-card">
-            <div class="card-title-bar">
-              <h2>Expense Allocation Breakdown</h2>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:1.15rem; margin-top:0.5rem;" id="finance-breakdown-list">
-              <!-- Rendered Dynamically -->
-              <div class="empty-list-text">No financial ledger uploaded. Upload Excel to generate breakdown.</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           2. MONTHLY LEDGER VIEW
-           ========================================== -->
-      <section id="monthly-ledger-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Monthly Ledger & Expense Categorization</h1>
-            <p>Categorize ledger expenses into specific heads and route them to corresponding ledgers.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="app.exportFinanceLedgerJSON()">
-              <i class="fa-solid fa-file-export"></i> Export JSON
-            </button>
-            <button class="btn btn-danger" onclick="app.clearFinanceLedger()">
-              <i class="fa-solid fa-trash-can"></i> Clear Ledger
-            </button>
-          </div>
-        </div>
-
-        <div class="chart-card">
-          <div class="table-actions-bar" style="flex-direction: column; align-items: stretch; gap: 0.75rem;">
-            <!-- Search & Filters -->
-            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
-              <div class="search-input-wrapper" style="flex-grow:1; min-width: 200px; position:relative;">
-                <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); color:var(--text-dim);"></i>
-                <input type="text" class="form-control" id="ledger-search" placeholder="Search transactions..." oninput="app.renderMonthlyLedger()" style="padding-left:2.25rem;">
-              </div>
-
-              <!-- Month Filter Dropdown -->
-              <div style="display: flex; align-items: center; gap: 0.35rem;">
-                <label for="ledger-filter-month" style="font-size:0.75rem; font-weight:600; color:var(--text-muted); margin:0; white-space:nowrap;"><i class="fa-solid fa-calendar-days"></i> Month:</label>
-                <select class="form-control" id="ledger-filter-month" onchange="app.renderMonthlyLedger()" style="width: 170px;">
-                  <option value="">-- All Months --</option>
-                </select>
-              </div>
-
-              <!-- Category Filter Dropdown -->
-              <div style="display: flex; align-items: center; gap: 0.35rem;">
-                <label for="ledger-filter-category" style="font-size:0.75rem; font-weight:600; color:var(--text-muted); margin:0; white-space:nowrap;"><i class="fa-solid fa-tags"></i> Category:</label>
-                <select class="form-control" id="ledger-filter-category" onchange="app.renderMonthlyLedger()" style="width: 220px;">
-                  <option value="">-- All Categories --</option>
-                  <option value="Sale Receipt">Sale Receipt (Sales Revenue)</option>
-                  <option value="Uncategorized">Uncategorized</option>
-                  <option value="lease">Lease</option>
-                  <option value="electricity">Electricity</option>
-                  <option value="banking and finance expense">Banking & Finance</option>
-                  <option value="salary and wages">Salary & Wages</option>
-                  <option value="growing expenses">Growing Expenses</option>
-                  <option value="processing">Processing Expenses</option>
-                  <option value="Capital Infusion">Capital Infusion</option>
-                  <option value="other/misc">Other / Misc</option>
-                </select>
-              </div>
-
-              <div class="td-muted font-sm" style="margin-left: auto;">
-                Change category dropdown to route entries (e.g. Sale Receipt counts as credit revenue).
-              </div>
-            </div>
-
-            <!-- Month Summary KPI Strip -->
-            <div id="ledger-month-summary-bar" style="display:none; background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.85rem; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-              <!-- Populated dynamically -->
-            </div>
-          </div>
-
-          <div class="table-container">
-            <table class="custom-table" id="tbl-monthly-ledger">
-              <thead>
-                <tr>
-                  <th class="sortable" onclick="app.sortLedger('date')">Date <i class="fa-solid fa-sort" id="sort-icon-date"></i></th>
-                  <th>Transaction Details (Remark)</th>
-                  <th class="sortable" onclick="app.sortLedger('debit')">Debit (Rs.) <i class="fa-solid fa-sort" id="sort-icon-debit"></i></th>
-                  <th class="sortable" onclick="app.sortLedger('credit')">Credit (Rs.) <i class="fa-solid fa-sort" id="sort-icon-credit"></i></th>
-                  <th>Main Category (Routing Head)</th>
-                  <th>Sub-Category (Sub-Head)</th>
-                  <th style="text-align: right;">Action</th>
-                </tr>
-              </thead>
-              <tbody id="ledger-table-body">
-                <!-- Populated dynamically -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           3. EMPLOYEE SUMMARY DIRECTORY
-           ========================================== -->
-      <section id="employee-directory-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Employee Directory & Payroll Sync</h1>
-            <p>Define salary rules, bank details, and toggle employee activation status.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-primary" onclick="app.openAddEmployeeModal()">
-              <i class="fa-solid fa-user-plus"></i> Add New Employee
-            </button>
-          </div>
-        </div>
-
-        <!-- Master Directory Summary -->
-        <div class="chart-card">
-          <div class="card-title-bar">
-            <h2>Active Staff & Salary Rules</h2>
-          </div>
-          <div class="table-container">
-            <table class="custom-table">
-              <thead>
-                <tr>
-                  <th>Employee Name</th>
-                  <th>Designation</th>
-                  <th>Started From (Date)</th>
-                  <th>Monthly Salary (Rs.)</th>
-                  <th>Bank Details</th>
-                  <th>Status</th>
-                  <th style="text-align: right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="employees-table-body">
-                <!-- Populated dynamically -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Salary Payments Audit -->
-        <div class="chart-card">
-          <div class="card-title-bar">
-            <h2>Salary Payments Ledger (Routed from Monthly Excel)</h2>
-          </div>
-          <div class="table-container">
-            <table class="custom-table">
-              <thead>
-                <tr>
-                  <th>Payment Date</th>
-                  <th>Transaction Details (Remark)</th>
-                  <th>Sub-Head Allocation</th>
-                  <th style="text-align: right;">Amount Paid (Rs.)</th>
-                  <th>Linked Employee</th>
-                </tr>
-              </thead>
-              <tbody id="salary-payments-table-body">
-                <!-- Populated dynamically -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           4. OPERATIONAL DASHBOARD
-           ========================================== -->
-      <section id="dashboard-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Operational Inventory Dashboard</h1>
-            <p>Real-time analytics and inventory status at a glance.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="app.generateDemoData()">
-              <i class="fa-solid fa-wand-magic-sparkles"></i> Load Inventory Demo Data
-            </button>
-          </div>
-        </div>
-        
-        <!-- Metrics Grid -->
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-info">
-              <h3>Raw Material Value</h3>
-              <div class="metric-value" id="metric-inventory-value">Rs. 0.00</div>
-              <div class="metric-trend trend-neutral">
-                <i class="fa-solid fa-circle-info"></i> RM inventory asset cost
-              </div>
-            </div>
-            <div class="metric-icon purple">
-              <i class="fa-solid fa-wallet"></i>
-            </div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-info">
-              <h3>Finished Goods Value</h3>
-              <div class="metric-value" id="metric-fg-value">Rs. 0.00</div>
-              <div class="metric-trend trend-neutral">
-                <i class="fa-solid fa-circle-check"></i> FG warehouse asset worth
-              </div>
-            </div>
-            <div class="metric-icon green">
-              <i class="fa-solid fa-cubes"></i>
-            </div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-info">
-              <h3>Raw Materials</h3>
-              <div class="metric-value" id="metric-materials-count">0</div>
-              <div class="metric-trend trend-up">
-                <i class="fa-solid fa-arrow-up"></i> Active ingredients
-              </div>
-            </div>
-            <div class="metric-icon blue">
-              <i class="fa-solid fa-box-open"></i>
-            </div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-info">
-              <h3>Product BOMs</h3>
-              <div class="metric-value" id="metric-products-count">0</div>
-              <div class="metric-trend trend-neutral">
-                <i class="fa-solid fa-link"></i> Defined BOM designs
-              </div>
-            </div>
-            <div class="metric-icon amber">
-              <i class="fa-solid fa-sitemap"></i>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Dashboard Layout Split -->
-        <div class="dashboard-grid">
-          <!-- Critical Material Warnings -->
-          <div class="chart-card">
-            <div class="card-title-bar">
-              <h2>Material Alerts (Shortages)</h2>
-              <span class="badge badge-primary" id="rm-alert-summary-badge">Healthy</span>
-            </div>
-            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
-              <table class="custom-table">
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Raw Material</th>
-                    <th>Current Stock</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="dashboard-rm-alerts-list">
-                  <!-- Generated dynamically -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-          
-          <!-- Critical Finished Goods Warnings -->
-          <div class="chart-card">
-            <div class="card-title-bar">
-              <h2>Finished Goods Alerts (Reorder)</h2>
-              <span class="badge badge-primary" id="fg-alert-summary-badge">Healthy</span>
-            </div>
-            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
-              <table class="custom-table">
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Finished Good</th>
-                    <th>Current Stock</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="dashboard-fg-alerts-list">
-                  <!-- Generated dynamically -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div class="dashboard-grid" style="grid-template-columns: 1fr;">
-          <!-- Recent Activity Card -->
-          <div class="chart-card">
-            <div class="card-title-bar">
-              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                <h2>Recent Operational Activities</h2>
-                <span class="badge badge-info" style="font-size:0.7rem;">Order • Inward • Production • Dispatch</span>
-              </div>
-              <div style="display:flex; align-items:center; gap:0.75rem;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="app.pullDataFromSupabase()" title="Pull latest activities from Cloud" style="font-size:0.72rem; padding:0.25rem 0.55rem;">
-                  <i class="fa-solid fa-arrows-rotate"></i> Sync Cloud
-                </button>
-                <a href="#" class="td-muted font-sm" onclick="app.switchView('history-view')">View All Logs</a>
-              </div>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:0.6rem;" id="dashboard-activity-list">
-              <!-- Generated dynamically -->
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           5. RAW MATERIALS VIEW
-           ========================================== -->
-      <section id="raw-materials-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Raw Materials Ledger</h1>
-            <p>Manage stock, track balances, and verify weighted average purchase prices.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-warning btn-sm" onclick="app.load7NovCutoffData()" title="Reset inventory to 7th Nov 2026 Cutoff Starting Stock" style="font-weight:600;">
-              <i class="fa-solid fa-rotate"></i> 7-Nov Cutoff Stock
-            </button>
-            <button class="btn btn-success" onclick="app.openExportModal('raw_materials')">
-              <i class="fa-solid fa-file-excel"></i> Export to Excel
-            </button>
-            <button class="btn btn-secondary" onclick="app.downloadExcelTemplate('materials')">
-              <i class="fa-solid fa-file-arrow-down"></i> Excel Template
-            </button>
-            <button class="btn btn-secondary" onclick="document.getElementById('excel-material-file').click()">
-              <i class="fa-solid fa-file-excel"></i> Import Excel
-            </button>
-            <input type="file" id="excel-material-file" class="hidden-file-input" accept=".xlsx, .xls" onchange="app.importExcel(event, 'materials')">
-            <button class="btn btn-primary" onclick="app.openAddMaterialModal()">
-              <i class="fa-solid fa-plus"></i> Add Raw Material
-            </button>
-          </div>
-        </div>
-        
-        <div class="search-filter-bar" style="margin-bottom:1rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
-          <div class="search-input-wrapper" style="position:relative; max-width: 360px; flex:1;">
-            <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); color:var(--text-dim);"></i>
-            <input type="text" class="form-control" id="material-search" placeholder="Search raw materials..." oninput="app.renderMaterials()" style="padding-left:2.25rem;">
-          </div>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-mat-filter-deficit" onclick="app.toggleMaterialDeficitFilter()" style="font-weight:700;">
-            <i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;"></i> Show Items to Order (<span id="count-mat-deficit">0</span>)
+        <div style="display:flex; align-items:center; gap:0.4rem;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-export-excel" onclick="app.openExportModal()" style="padding:0.25rem 0.55rem; font-size:0.7rem; border-radius:20px; display:flex; align-items:center; gap:0.3rem;" title="Export to Excel">
+            <i class="fa-solid fa-file-excel" style="color:#10b981;"></i> <span>Export</span>
           </button>
-        </div>
-        
-        <div class="chart-card">
-          <div class="table-container">
-            <table class="custom-table">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Material Name</th>
-                  <th>Description</th>
-                  <th>Current Stock</th>
-                  <th>Buffer Stock</th>
-                  <th>Unit</th>
-                  <th>Weighted Avg Rate (Rs.)</th>
-                  <th>Total Asset Value (Rs.)</th>
-                  <th style="text-align: right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="materials-table-body">
-                <!-- Generated dynamically -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           6. FINISHED GOODS WAREHOUSE VIEW
-           ========================================== -->
-      <section id="finished-goods-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Finished Goods Warehouse</h1>
-            <p>Monitor manufactured items stock levels, retail pricing, and warehouse valuations.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-warning btn-sm" onclick="app.load7NovCutoffData()" title="Reset inventory to 7th Nov 2026 Cutoff Starting Stock" style="font-weight:600;">
-              <i class="fa-solid fa-rotate"></i> 7-Nov Cutoff Stock
-            </button>
-            <button class="btn btn-success" onclick="app.openExportModal('finished_goods')">
-              <i class="fa-solid fa-file-excel"></i> Export to Excel
-            </button>
-            <button class="btn btn-secondary" onclick="app.downloadExcelTemplate('products')">
-              <i class="fa-solid fa-file-arrow-down"></i> Excel Template
-            </button>
-            <button class="btn btn-secondary" onclick="document.getElementById('excel-fg-file').click()">
-              <i class="fa-solid fa-file-excel"></i> Import Excel
-            </button>
-            <input type="file" id="excel-fg-file" class="hidden-file-input" accept=".xlsx, .xls" onchange="app.importExcel(event, 'products')">
-            <button class="btn btn-primary" onclick="app.switchView('mobile-console-view')">
-              <i class="fa-solid fa-mobile-screen-button"></i> Mobile Console
-            </button>
-          </div>
-        </div>
-        
-        <div class="search-filter-bar" style="margin-bottom:1rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
-          <div class="search-input-wrapper" style="position:relative; max-width: 360px; flex:1;">
-            <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); color:var(--text-dim);"></i>
-            <input type="text" class="form-control" id="fg-search" placeholder="Search finished goods..." oninput="app.renderFinishedGoods()" style="padding-left:2.25rem;">
-          </div>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-fg-filter-deficit" onclick="app.toggleFinishedGoodsDeficitFilter()" style="font-weight:700;">
-            <i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;"></i> Show Products to Produce (<span id="count-fg-deficit">0</span>)
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-sync-cloud" onclick="app.refreshCloudData()" style="padding:0.25rem 0.55rem; font-size:0.7rem; border-radius:20px; display:flex; align-items:center; gap:0.3rem;" title="Refresh / Pull latest materials from Cloud Database">
+            <i class="fa-solid fa-arrows-rotate" id="sync-icon"></i> <span>Sync</span>
           </button>
-        </div>
-        
-        <div class="chart-card">
-          <div class="table-container">
-            <table class="custom-table">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Product Name</th>
-                  <th>Packaging</th>
-                  <th>Description</th>
-                  <th>Warehouse Stock</th>
-                  <th>Buffer Stock</th>
-                  <th>MRP / Retail (Rs.)</th>
-                  <th>Selling Price (Rs.)</th>
-                  <th>Asset Value (Rs.)</th>
-                  <th>Stock Status</th>
-                </tr>
-              </thead>
-              <tbody id="finished-goods-table-body">
-                <!-- Generated dynamically -->
-              </tbody>
-            </table>
+          <div class="db-status-badge offline" id="db-status-indicator" onclick="app.openSettingsModal()" title="Database Connection Status. Click to edit settings.">
+            <i class="fa-solid fa-cloud-slash"></i> Offline Mode
           </div>
         </div>
-      </section>
+      </header>
 
       <!-- ==========================================
-           7. PRODUCTS & BOM VIEW
+           1. VIEW: ORDER BOOK & PURCHASE REQUEST
            ========================================== -->
-      <section id="products-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Products & Bill of Materials (BOM)</h1>
-            <p>Define finished products and the raw materials required to assemble them, including wastage factors.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-primary" onclick="app.openAddProductModal()">
-              <i class="fa-solid fa-plus"></i> Create Product BOM
-            </button>
-          </div>
-        </div>
-        
-        <!-- Product Grid -->
-        <div class="products-grid" id="products-grid-container">
-          <!-- Generated dynamically -->
-        </div>
-      </section>
-
-      <!-- ==========================================
-           8. DAILY MOBILE CONSOLE
-           ========================================== -->
-      <section id="mobile-console-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Processing Head Console</h1>
-            <p>Simplified dashboard simulating mobile responsive interfaces for quick warehouse floor inputs.</p>
-          </div>
-        </div>
-
-        <div class="mobile-simulator-layout">
-          <div class="mobile-device">
-            <div class="mobile-notch"></div>
-            
-            <div class="mobile-screen">
-              <div class="mobile-header">
-                <h2><i class="fa-solid fa-leaf" style="color: var(--color-primary);"></i> GrowFlow Mobile</h2>
-                <span class="mobile-header-user">Processing Head</span>
-              </div>
-              
-              <!-- Quick Menu Switcher -->
-              <div class="mobile-grid-menu">
-                <div class="mobile-menu-item active" data-pane="pane-mobile-inward" id="menu-mobile-inward">
-                  <i class="fa-solid fa-circle-down"></i>
-                  <span>1. Inward Stock</span>
-                </div>
-                <div class="mobile-menu-item" data-pane="pane-mobile-process" id="menu-mobile-process">
-                  <i class="fa-solid fa-gears"></i>
-                  <span>2. Processing Run</span>
-                </div>
-                <div class="mobile-menu-item" data-pane="pane-mobile-outward" id="menu-mobile-outward">
-                  <i class="fa-solid fa-circle-up"></i>
-                  <span>3. Outward Sales</span>
-                </div>
-              </div>
-
-              <!-- PANE 1: DAILY INWARD RAW MATERIAL -->
-              <div class="mobile-pane active" id="pane-mobile-inward">
-                <form id="mobile-inward-form" onsubmit="app.handleMobileInward(event)">
-                  <div class="mobile-card">
-                    <div class="mobile-card-title">Log Raw Material Inward</div>
-                    
-                    <div class="form-group">
-                      <label>Raw Material *</label>
-                      <select class="form-control" id="mobile-in-material" required>
-                        <!-- Loaded dynamically -->
-                      </select>
-                    </div>
-
-                    <div class="form-row">
-                      <div class="form-group">
-                        <label>Quantity *</label>
-                        <input type="number" step="0.001" class="form-control" id="mobile-in-qty" placeholder="e.g. 50" required>
-                      </div>
-                      <div class="form-group">
-                        <label>Rate (Rs.) *</label>
-                        <input type="number" step="0.01" class="form-control" id="mobile-in-rate" placeholder="e.g. 180" required>
-                      </div>
-                    </div>
-
-                    <div class="form-group">
-                      <label>Supplier / Vendor *</label>
-                      <input type="text" class="form-control" id="mobile-in-supplier" placeholder="e.g. Agro-Suppliers Ltd" required>
-                    </div>
-
-                    <div class="form-group">
-                      <label>Gate Entry Ref / Bill No *</label>
-                      <input type="text" class="form-control" id="mobile-in-bill" placeholder="e.g. GE-1002" required>
-                    </div>
-
-                    <!-- PDF Upload option in Purchase tab -->
-                    <div class="form-group" style="margin-top: 1rem; border-top: 1px solid var(--border-light); padding-top: 1rem;">
-                      <label><i class="fa-solid fa-file-pdf"></i> Link Invoice PDF (Optional)</label>
-                      <input type="file" id="mobile-in-pdf" accept="application/pdf" class="form-control" style="font-size:0.8rem; padding: 0.4rem;">
-                    </div>
-
-                    <button type="submit" class="btn btn-primary" style="width:100%; margin-top: 0.5rem; padding: 0.75rem;">
-                      <i class="fa-solid fa-check-double"></i> Save Inward & Update stock
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-              <!-- PANE 2: DAILY PROCESSING / MANUFACTURING -->
-              <div class="mobile-pane" id="pane-mobile-process">
-                <form id="mobile-process-form" onsubmit="app.handleMobileProcess(event)">
-                  <div class="mobile-card">
-                    <div class="mobile-card-title">Daily Order / Manufacturing Run</div>
-                    
-                    <div class="form-group">
-                      <label>Select Product to Process *</label>
-                      <select class="form-control" id="mobile-pr-product" onchange="app.updateMobileRecipeForecast()" required>
-                        <!-- Loaded dynamically -->
-                      </select>
-                    </div>
-
-                    <div class="form-group">
-                      <label>Manufacture Qty (Batch Size) *</label>
-                      <input type="number" step="1" min="1" class="form-control" id="mobile-pr-qty" placeholder="Quantity of bottles/pouches" oninput="app.updateMobileRecipeForecast()" required>
-                    </div>
-
-                    <!-- Recipe Ingredients checklist / deficit alerts -->
-                    <div style="background-color:rgba(0,0,0,0.2); padding:0.75rem; border-radius:6px; margin-bottom:1rem; font-size:0.8rem;">
-                      <div style="font-weight:bold; color:var(--text-muted); margin-bottom:0.4rem; text-transform:uppercase; font-size:0.7rem;">Ingredients Requirement Checklist</div>
-                      <div id="mobile-recipe-list" style="display:flex; flex-direction:column; gap:0.35rem;">
-                        <span class="td-muted italic">Select a product to view ingredients cover.</span>
-                      </div>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary" style="width:100%; padding: 0.75rem;">
-                      <i class="fa-solid fa-gears"></i> Execute Manufacturing Batch
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-              <!-- PANE 3: DAILY OUTWARD SALE -->
-              <div class="mobile-pane" id="pane-mobile-outward">
-                <form id="mobile-outward-form" onsubmit="app.handleMobileOutward(event)">
-                  <div class="mobile-card">
-                    <div class="mobile-card-title">Record Outward Dispatch (Sale)</div>
-                    
-                    <div class="form-group">
-                      <label>Finished Good Product *</label>
-                      <select class="form-control" id="mobile-out-product" required>
-                        <!-- Loaded dynamically -->
-                      </select>
-                    </div>
-
-                    <div class="form-row">
-                      <div class="form-group">
-                        <label>Dispatch Qty *</label>
-                        <input type="number" min="1" class="form-control" id="mobile-out-qty" placeholder="Quantity in pieces" required>
-                      </div>
-                      <div class="form-group">
-                        <label>Price (Rs./unit) *</label>
-                        <input type="number" min="0" step="0.01" class="form-control" id="mobile-out-price" placeholder="Selling price" required>
-                      </div>
-                    </div>
-
-                    <div class="form-group">
-                      <label>Customer Name *</label>
-                      <input type="text" class="form-control" id="mobile-out-customer" placeholder="e.g. FreshMart Ltd" required>
-                    </div>
-
-                    <div class="form-group">
-                      <label>Invoice Number *</label>
-                      <input type="text" class="form-control" id="mobile-out-invoice" placeholder="e.g. IN-9034" required>
-                    </div>
-
-                    <!-- PDF Upload option in Sale tab -->
-                    <div class="form-group" style="margin-top: 1rem; border-top: 1px solid var(--border-light); padding-top: 1rem;">
-                      <label><i class="fa-solid fa-file-pdf"></i> Link Sales Invoice PDF (Optional)</label>
-                      <input type="file" id="mobile-out-pdf" accept="application/pdf" class="form-control" style="font-size:0.8rem; padding: 0.4rem;">
-                    </div>
-
-                    <button type="submit" class="btn btn-primary" style="width:100%; margin-top: 0.5rem; padding: 0.75rem;">
-                      <i class="fa-solid fa-truck-dispatch"></i> Dispatch & Reduce Stock
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           9. PURCHASE PDF VERIFICATION VIEW (FROM ERP)
-           ========================================== -->
-      <section id="purchase-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Upload Purchase Invoice</h1>
-            <p>Upload purchase PDF files. The system will automatically extract lines, rates, and restock raw materials.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-success" onclick="app.openExportModal('purchase_inwards')">
-              <i class="fa-solid fa-file-excel"></i> Export Inwards to Excel
-            </button>
-          </div>
-        </div>
-        
-        <div class="chart-card">
-          <div class="dropzone-container" id="purchase-dropzone">
-            <div class="dropzone-icon">
-              <i class="fa-solid fa-file-pdf"></i>
-            </div>
-            <div class="dropzone-text">
-              <h3>Drag and drop your Purchase PDF here</h3>
-              <p>Supports standard invoice layouts. Max file size 10MB.</p>
-            </div>
-            <div style="margin-top: 0.5rem;">
-              <span class="td-muted">or</span>
-            </div>
-            <button class="btn btn-secondary" onclick="document.getElementById('purchase-file-input').click()">
-              Browse Files
-            </button>
-            <input type="file" id="purchase-file-input" class="hidden-file-input" accept=".pdf" onchange="app.handlePurchaseUpload(this.files[0])">
+      <section id="view-order" class="app-view active">
+        <div class="ui-card">
+          <div class="card-title">
+            <span><i class="fa-solid fa-cart-shopping"></i> Purchase Order Book</span>
           </div>
           
-          <div class="alert-banner warning" style="margin-top: 1.5rem; margin-bottom: 0;">
-            <i class="fa-solid fa-circle-info"></i>
-            <div>
-              <strong>Heuristic Matching Engine:</strong> MFP-ERP extracts all text from the PDF and uses line analysis to find item descriptions, rates, and values. You will verify them before committing to the inventory.
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           10. SALE PDF VERIFICATION VIEW (FROM ERP)
-           ========================================== -->
-      <section id="sale-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Upload Sale Invoice</h1>
-            <p>Upload sales invoices to automatically calculate and deduct raw materials from stock based on BOM & wastage factors.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-success" onclick="app.openExportModal('sales_outwards')">
-              <i class="fa-solid fa-file-excel"></i> Export Sales to Excel
-            </button>
-          </div>
-        </div>
-        
-        <div class="chart-card">
-          <div class="dropzone-container" id="sale-dropzone">
-            <div class="dropzone-icon">
-              <i class="fa-solid fa-file-invoice"></i>
-            </div>
-            <div class="dropzone-text">
-              <h3>Drag and drop Sales Invoices here (Single or Multiple PDFs)</h3>
-              <p>Extracts invoice no, date, customer, and items (Qty, Rate, Disc, Amount). Batch uploads supported.</p>
-            </div>
-            <div style="margin-top: 0.5rem;">
-              <span class="td-muted">or</span>
-            </div>
-            <div style="display:flex; gap:1rem;">
-              <button class="btn btn-secondary" onclick="document.getElementById('sale-file-input').click()">
-                <i class="fa-solid fa-folder-open"></i> Browse PDF / Image Files
-              </button>
-              <button class="btn btn-primary" onclick="app.openManualSaleModal()">
-                Record Manual Sale
-              </button>
-            </div>
-            <input type="file" id="sale-file-input" class="hidden-file-input" accept=".pdf,image/jpeg,image/png,image/gif,image/bmp,image/webp,.jpg,.jpeg,.png,.gif,.bmp" multiple onchange="app.handleSaleUploadMultiple(this.files)">
-          </div>
-          
-          <div class="alert-banner warning" style="margin-top: 1.5rem; margin-bottom: 0;">
-            <i class="fa-solid fa-compass-drafting"></i>
-            <div>
-              <strong>BOM Deduction & Wastage:</strong> When a finished product is sold, the corresponding raw materials defined in its Bill of Materials will be reduced from your ledger. An item-wise wastage percentage is applied to reflect scrap.
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           10B. DEBIT NOTES VIEW
-           ========================================== -->
-      <section id="debit-notes-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Vendor Debit Notes</h1>
-            <p>Official debit notes issued to suppliers for defective, damaged, or rejected raw materials.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-success" onclick="app.openExportModal('debit_notes')" style="background-color: #10b981; border-color: #10b981; color: white;">
-              <i class="fa-solid fa-file-excel"></i> Export to Excel
-            </button>
-            <button class="btn btn-primary" onclick="app.openCreateDebitNoteModal()">
-              <i class="fa-solid fa-plus"></i> Issue Debit Note
-            </button>
-          </div>
-        </div>
-
-        <div class="search-filter-bar" style="margin-bottom:1rem;">
-          <div class="search-input-wrapper" style="position:relative; max-width: 360px;">
-            <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); color:var(--text-dim);"></i>
-            <input type="text" class="form-control" id="dn-desktop-search" placeholder="Search debit notes by vendor or DN no..." oninput="app.renderDebitNotesTable()" style="padding-left:2.25rem;">
-          </div>
-        </div>
-
-        <div class="chart-card">
-          <div class="table-container">
-            <table class="custom-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Debit Note No</th>
-                  <th>Vendor / Supplier</th>
-                  <th>Rejection Reason</th>
-                  <th>Defective Items Returned</th>
-                  <th>Total Amount (Rs.)</th>
-                  <th style="text-align: right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="debit-notes-table-body">
-                <!-- Dynamically rendered -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           11. TRANSACTION HISTORY LOGGER
-           ========================================== -->
-      <section id="history-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>Operational Activity Logs</h1>
-            <p>Detailed historical trail of stock inward/outward adjustments and production logs.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-success" onclick="app.openExportModal('production')" style="background-color: #10b981; border-color: #10b981; color: white;">
-              <i class="fa-solid fa-file-excel"></i> Export Production Runs
-            </button>
-            <button class="btn btn-secondary" onclick="app.exportDatabase()">
-              <i class="fa-solid fa-file-arrow-down"></i> Export DB JSON
-            </button>
-            <button class="btn btn-danger" onclick="app.resetDatabase()">
-              <i class="fa-solid fa-trash-can"></i> Reset Database
-            </button>
-          </div>
-        </div>
-
-        <div class="chart-card">
-          <!-- Filter tabs for Activity Logs -->
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
-            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;" id="history-filter-buttons">
-              <button type="button" class="btn btn-secondary btn-sm" id="hist-filter-all" onclick="app.setHistoryFilter('all')" style="font-weight:600;">All Activities</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="hist-filter-order" onclick="app.setHistoryFilter('order')"><i class="fa-solid fa-cart-shopping" style="color:#f59e0b;"></i> Orders</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="hist-filter-inward" onclick="app.setHistoryFilter('inward')"><i class="fa-solid fa-truck-ramp-box" style="color:#10b981;"></i> Inwards</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="hist-filter-production" onclick="app.setHistoryFilter('production')"><i class="fa-solid fa-industry" style="color:#38bdf8;"></i> Production</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="hist-filter-dispatch" onclick="app.setHistoryFilter('dispatch')"><i class="fa-solid fa-truck-fast" style="color:#818cf8;"></i> Dispatches</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="hist-filter-debit" onclick="app.setHistoryFilter('debit_note')"><i class="fa-solid fa-file-circle-minus" style="color:#ef4444;"></i> Debit Notes</button>
-            </div>
-            <div>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="app.pullDataFromSupabase()" title="Sync activities from Cloud">
-                <i class="fa-solid fa-arrows-rotate" id="hist-sync-icon"></i> Pull Cloud Logs
-              </button>
-            </div>
-          </div>
-          <div class="table-container">
-            <table class="custom-table">
-              <thead>
-                <tr>
-                  <th>Timestamp / Date</th>
-                  <th>Activity Type</th>
-                  <th>Ref Doc No</th>
-                  <th>Activity Details</th>
-                  <th>Stock / Quantity Details</th>
-                  <th style="text-align: right;">Action</th>
-                </tr>
-              </thead>
-              <tbody id="history-table-body">
-                <!-- Generated dynamically -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           11B. INVENTORY RECONCILIATION & CUTOVER WORKSPACE
-           ========================================== -->
-      <section id="inventory-reconciliation-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1 style="display:flex; align-items:center; gap:0.6rem;">
-              <i class="fa-solid fa-scale-balanced" style="color:#10b981;"></i>
-              Inventory Cutover & Reconciliation Workspace
-            </h1>
-            <p>Establish true current inventory position starting from 1st April 2026. Upload purchases, sales, and physical stock to calculate exact balances and transfer cleanly into live ERP.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="app.downloadAllReconciliationTemplates()" title="Download sample Excel templates for opening stock, purchases, sales, and physical counts">
-              <i class="fa-solid fa-download"></i> Download All Templates (.xlsx)
-            </button>
-            <button class="btn btn-secondary" onclick="app.exportDatabase()" title="Backup current database before cutover">
-              <i class="fa-solid fa-shield-halved"></i> Pre-Cutover Backup JSON
-            </button>
-            <button class="btn btn-danger" onclick="app.resetReconciliationWorkspace()" title="Clear draft reconciliation tables">
-              <i class="fa-solid fa-rotate-left"></i> Reset Workspace
-            </button>
-          </div>
-        </div>
-
-        <div class="rec-container">
-          <!-- Information Banner -->
-          <div class="rec-banner-info">
-            <i class="fa-solid fa-circle-nodes"></i>
-            <div style="flex:1;">
-              <strong style="color:#10b981; font-size:0.95rem;">Manufacturing Inventory Formula:</strong>
-              <div style="font-size:0.84rem; margin-top:0.35rem; line-height:1.45; color:var(--text-main);">
-                <strong>Raw Material in Hand</strong> = Opening Stock (1-Apr-2026) + Total Purchases (1-Apr to Date) - Consumed in Sold Goods (via BOM) - Embodied in Current Finished Goods Stock (via BOM).<br>
-                <strong>Current Finished Goods</strong> = Verified Physical Stock Count on hand today. Once verified, click <em>"Apply & Transfer"</em> to set clean opening figures and start fresh!
-              </div>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:0.35rem; min-width: 220px;">
-              <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.78rem;">
-                <span class="td-muted">Cutover Start Date:</span>
-                <input type="date" id="rec-cutover-date" value="2026-04-01" class="form-control" style="width:125px; padding:0.2rem 0.4rem; font-size:0.75rem;" onchange="app.computeReconciliationMatrix()">
-              </div>
-              <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.78rem;">
-                <span class="td-muted">BOM Wastage Scrap:</span>
-                <span id="rec-wastage-display" style="font-weight:700; color:#10b981;">1.5%</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 4-Feed Ingestion Cards -->
-          <div class="rec-feeds-grid">
-            <!-- Feed 1: Opening Stock -->
-            <div class="rec-feed-card" style="border-top: 3px solid #3b82f6;">
-              <div>
-                <div class="rec-feed-header">
-                  <div class="rec-feed-title" style="color:#3b82f6;">
-                    <i class="fa-solid fa-flag-checkered"></i> 1. Opening Stock
-                  </div>
-                  <span id="rec-opening-badge" class="rec-feed-badge">0 items loaded</span>
-                </div>
-                <p class="td-muted" style="font-size:0.75rem; margin:0.4rem 0 0.75rem 0;">Baseline stock as of 1st April 2026 (or start fresh with 0 balance).</p>
-                
-                <input type="file" id="rec-file-opening" accept=".xlsx, .xls, .csv" style="display:none;" onchange="app.handleReconciliationFileUpload('opening', this.files[0])">
-                <div class="rec-dropzone-mini" onclick="document.getElementById('rec-file-opening').click()">
-                  <i class="fa-solid fa-file-arrow-up" style="color:#3b82f6;"></i>
-                  <div style="font-size:0.78rem; font-weight:600;">Upload Opening Stock</div>
-                  <div class="td-muted" style="font-size:0.68rem;">Excel (.xlsx) or CSV</div>
-                </div>
-              </div>
-
-              <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
-                <button type="button" class="btn btn-secondary btn-sm" style="flex:1; font-size:0.72rem; padding:0.25rem 0.4rem;" onclick="app.downloadReconciliationTemplate('opening')">
-                  <i class="fa-solid fa-file-excel" style="color:#10b981;"></i> Template
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" style="flex:1; font-size:0.72rem; padding:0.25rem 0.4rem;" onclick="app.setReconciliationZeroOpening()">
-                  <i class="fa-solid fa-circle-dot" style="color:#3b82f6;"></i> Set All 0
-                </button>
-              </div>
-            </div>
-
-            <!-- Feed 2: Purchases from 1-Apr -->
-            <div class="rec-feed-card" style="border-top: 3px solid #10b981;">
-              <div>
-                <div class="rec-feed-header">
-                  <div class="rec-feed-title" style="color:#10b981;">
-                    <i class="fa-solid fa-truck-ramp-box"></i> 2. Purchase Bills
-                  </div>
-                  <span id="rec-purchases-badge" class="rec-feed-badge">0 bills loaded</span>
-                </div>
-                <p class="td-muted" style="font-size:0.75rem; margin:0.4rem 0 0.75rem 0;">All raw material inwards & invoices from 1st April 2026 onwards.</p>
-                
-                <input type="file" id="rec-file-purchases" accept=".xlsx, .xls, .csv, .pdf" multiple style="display:none;" onchange="app.handleReconciliationFileUpload('purchases', this.files)">
-                <div class="rec-dropzone-mini" onclick="document.getElementById('rec-file-purchases').click()">
-                  <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i>
-                  <div style="font-size:0.78rem; font-weight:600;">Upload Purchase Bills</div>
-                  <div class="td-muted" style="font-size:0.68rem;">Excel sheet OR multiple PDF bills</div>
-                </div>
-              </div>
-
-              <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
-                <button type="button" class="btn btn-secondary btn-sm" style="flex:1; font-size:0.72rem; padding:0.25rem 0.4rem;" onclick="app.downloadReconciliationTemplate('purchases')">
-                  <i class="fa-solid fa-file-excel" style="color:#10b981;"></i> Template
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" style="flex:1; font-size:0.72rem; padding:0.25rem 0.4rem;" onclick="app.loadExistingPurchasesSinceDate()">
-                  <i class="fa-solid fa-cloud-arrow-down"></i> Load Live DB
-                </button>
-              </div>
-            </div>
-
-            <!-- Feed 3: Sales Invoices from 1-Apr -->
-            <div class="rec-feed-card" style="border-top: 3px solid #f59e0b;">
-              <div>
-                <div class="rec-feed-header">
-                  <div class="rec-feed-title" style="color:#f59e0b;">
-                    <i class="fa-solid fa-receipt"></i> 3. Sales Invoices
-                  </div>
-                  <span id="rec-sales-badge" class="rec-feed-badge">0 invoices loaded</span>
-                </div>
-                <p class="td-muted" style="font-size:0.75rem; margin:0.4rem 0 0.75rem 0;">All finished goods sold/dispatched from 1st April 2026 onwards.</p>
-                
-                <input type="file" id="rec-file-sales" accept=".xlsx, .xls, .csv, .pdf" multiple style="display:none;" onchange="app.handleReconciliationFileUpload('sales', this.files)">
-                <div class="rec-dropzone-mini" onclick="document.getElementById('rec-file-sales').click()">
-                  <i class="fa-solid fa-cart-flatbed" style="color:#f59e0b;"></i>
-                  <div style="font-size:0.78rem; font-weight:600;">Upload Sales Invoices</div>
-                  <div class="td-muted" style="font-size:0.68rem;">Excel sheet OR multiple PDF invoices</div>
-                </div>
-              </div>
-
-              <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
-                <button type="button" class="btn btn-secondary btn-sm" style="flex:1; font-size:0.72rem; padding:0.25rem 0.4rem;" onclick="app.downloadReconciliationTemplate('sales')">
-                  <i class="fa-solid fa-file-excel" style="color:#10b981;"></i> Template
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" style="flex:1; font-size:0.72rem; padding:0.25rem 0.4rem;" onclick="app.loadExistingSalesSinceDate()">
-                  <i class="fa-solid fa-cloud-arrow-down"></i> Load Live DB
-                </button>
-              </div>
-            </div>
-
-            <!-- Feed 4: Current Physical Stock -->
-            <div class="rec-feed-card" style="border-top: 3px solid #8b5cf6;">
-              <div>
-                <div class="rec-feed-header">
-                  <div class="rec-feed-title" style="color:#8b5cf6;">
-                    <i class="fa-solid fa-clipboard-check"></i> 4. Current Stock Count
-                  </div>
-                  <span id="rec-physical-badge" class="rec-feed-badge">0 items counted</span>
-                </div>
-                <p class="td-muted" style="font-size:0.75rem; margin:0.4rem 0 0.75rem 0;">Actual physical count of Finished Goods & Raw Materials on floor today.</p>
-                
-                <input type="file" id="rec-file-physical" accept=".xlsx, .xls, .csv" style="display:none;" onchange="app.handleReconciliationFileUpload('physical', this.files[0])">
-                <div class="rec-dropzone-mini" onclick="document.getElementById('rec-file-physical').click()">
-                  <i class="fa-solid fa-boxes-packing" style="color:#8b5cf6;"></i>
-                  <div style="font-size:0.78rem; font-weight:600;">Upload Physical Count</div>
-                  <div class="td-muted" style="font-size:0.68rem;">Excel sheet (.xlsx) or CSV</div>
-                </div>
-              </div>
-
-              <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
-                <button type="button" class="btn btn-secondary btn-sm" style="flex:1; font-size:0.72rem; padding:0.25rem 0.4rem;" onclick="app.downloadReconciliationTemplate('physical')">
-                  <i class="fa-solid fa-file-excel" style="color:#10b981;"></i> Template
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" style="flex:1; font-size:0.72rem; padding:0.25rem 0.4rem;" onclick="app.loadLiveStockAsPhysical()">
-                  <i class="fa-solid fa-copy"></i> Use Current DB
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- KPI Summary Strip -->
-          <div class="rec-kpi-strip">
-            <div class="rec-kpi-box">
-              <div class="rec-kpi-label">Total Purchases Inwarded</div>
-              <div class="rec-kpi-val" id="rec-kpi-purchases-val" style="color:#10b981;">Rs. 0.00</div>
-              <small class="td-muted" id="rec-kpi-purchases-qty">0 items</small>
-            </div>
-            <div class="rec-kpi-box">
-              <div class="rec-kpi-label">Total Sales Invoiced</div>
-              <div class="rec-kpi-val" id="rec-kpi-sales-val" style="color:#f59e0b;">Rs. 0.00</div>
-              <small class="td-muted" id="rec-kpi-sales-qty">0 units</small>
-            </div>
-            <div class="rec-kpi-box">
-              <div class="rec-kpi-label">RM Consumed in Goods</div>
-              <div class="rec-kpi-val" id="rec-kpi-consumed-val" style="color:#ef4444;">Rs. 0.00</div>
-              <small class="td-muted">BOM recipe deduction</small>
-            </div>
-            <div class="rec-kpi-box">
-              <div class="rec-kpi-label">Calculated RM Stock in Hand</div>
-              <div class="rec-kpi-val" id="rec-kpi-rm-balance-val" style="color:#38bdf8;">Rs. 0.00</div>
-              <small class="td-muted" id="rec-kpi-rm-count">0 materials in hand</small>
-            </div>
-            <div class="rec-kpi-box">
-              <div class="rec-kpi-label">Current FG Stock in Hand</div>
-              <div class="rec-kpi-val" id="rec-kpi-fg-balance-val" style="color:#8b5cf6;">0 units</div>
-              <small class="td-muted" id="rec-kpi-fg-valuation">Valuation: Rs. 0.00</small>
-            </div>
-          </div>
-
-          <!-- Reconciliation Matrix Section -->
-          <div class="chart-card">
-            <!-- Tabs & Filter Bar -->
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem; margin-bottom:1rem;">
-              <div class="rec-tabs-nav" style="border-bottom:none; padding:0;">
-                <button type="button" class="rec-tab-btn active" id="rec-subtab-btn-rm" onclick="app.switchReconciliationSubtab('rm')">
-                  <i class="fa-solid fa-boxes-stacked"></i> Raw Materials Matrix (<span id="rec-tab-rm-count">0</span>)
-                </button>
-                <button type="button" class="rec-tab-btn" id="rec-subtab-btn-fg" onclick="app.switchReconciliationSubtab('fg')">
-                  <i class="fa-solid fa-warehouse"></i> Finished Goods Matrix (<span id="rec-tab-fg-count">0</span>)
-                </button>
-                <button type="button" class="rec-tab-btn" id="rec-subtab-btn-purchases" onclick="app.switchReconciliationSubtab('purchases')">
-                  <i class="fa-solid fa-file-invoice"></i> Loaded Purchases (<span id="rec-tab-pur-count">0</span>)
-                </button>
-                <button type="button" class="rec-tab-btn" id="rec-subtab-btn-sales" onclick="app.switchReconciliationSubtab('sales')">
-                  <i class="fa-solid fa-receipt"></i> Loaded Sales (<span id="rec-tab-sal-count">0</span>)
-                </button>
-              </div>
-
-              <div style="display:flex; gap:0.5rem; align-items:center;">
-                <input type="text" class="form-control" id="rec-matrix-search" placeholder="Filter materials or SKUs..." oninput="app.renderReconciliationMatrixTables()" style="width:200px; padding:0.3rem 0.6rem; font-size:0.78rem;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="app.exportReconciliationReport()">
-                  <i class="fa-solid fa-file-excel" style="color:#10b981;"></i> Export Rec Report
-                </button>
-              </div>
-            </div>
-
-            <!-- Tab Pane 1: Raw Materials Reconciliation Matrix -->
-            <div id="rec-subtab-pane-rm" class="table-container" style="max-height: 480px; overflow-y:auto;">
-              <table class="custom-table" style="font-size:0.83rem;">
-                <thead>
-                  <tr>
-                    <th>Material Code</th>
-                    <th>Material Name</th>
-                    <th>Unit</th>
-                    <th style="text-align:right;">Opening Stock (1-Apr)</th>
-                    <th style="text-align:right;">Purchases (+)</th>
-                    <th style="text-align:right;">Consumed in Sales (-)</th>
-                    <th style="text-align:right;">In Current FG (-)</th>
-                    <th style="text-align:right; color:#38bdf8;">Calculated Balance (=)</th>
-                    <th style="text-align:right;">Physical Count</th>
-                    <th style="text-align:right;">Variance</th>
-                    <th style="text-align:center; min-width:115px; color:#10b981;">Final Stock to Apply</th>
-                  </tr>
-                </thead>
-                <tbody id="rec-matrix-rm-tbody">
-                  <!-- Rendered dynamically -->
-                </tbody>
-              </table>
-            </div>
-
-            <!-- Tab Pane 2: Finished Goods Matrix -->
-            <div id="rec-subtab-pane-fg" class="table-container" style="max-height: 480px; overflow-y:auto; display:none;">
-              <table class="custom-table" style="font-size:0.83rem;">
-                <thead>
-                  <tr>
-                    <th>Product SKU</th>
-                    <th>Product Name</th>
-                    <th>Packaging</th>
-                    <th style="text-align:right;">Opening Stock (1-Apr)</th>
-                    <th style="text-align:right;">Sales Dispatched (-)</th>
-                    <th style="text-align:right;">Physical Count on Floor</th>
-                    <th style="text-align:right;">Selling Rate (Rs)</th>
-                    <th style="text-align:right;">FG Valuation (Rs)</th>
-                    <th style="text-align:center; min-width:115px; color:#10b981;">Final Stock to Apply</th>
-                  </tr>
-                </thead>
-                <tbody id="rec-matrix-fg-tbody">
-                  <!-- Rendered dynamically -->
-                </tbody>
-              </table>
-            </div>
-
-            <!-- Tab Pane 3: Loaded Purchases -->
-            <div id="rec-subtab-pane-purchases" class="table-container" style="max-height: 480px; overflow-y:auto; display:none;">
-              <table class="custom-table" style="font-size:0.83rem;">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Bill / Invoice No</th>
-                    <th>Supplier / Vendor</th>
-                    <th>Raw Material</th>
-                    <th style="text-align:right;">Quantity</th>
-                    <th>Unit</th>
-                    <th style="text-align:right;">Rate (Rs)</th>
-                    <th style="text-align:right;">Total Amount (Rs)</th>
-                  </tr>
-                </thead>
-                <tbody id="rec-matrix-purchases-tbody">
-                  <!-- Rendered dynamically -->
-                </tbody>
-              </table>
-            </div>
-
-            <!-- Tab Pane 4: Loaded Sales -->
-            <div id="rec-subtab-pane-sales" class="table-container" style="max-height: 480px; overflow-y:auto; display:none;">
-              <table class="custom-table" style="font-size:0.83rem;">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Invoice No</th>
-                    <th>Customer / Party</th>
-                    <th>Product SKU / Name</th>
-                    <th style="text-align:right;">Quantity Sold</th>
-                    <th>Packaging</th>
-                    <th style="text-align:right;">Rate (Rs)</th>
-                    <th style="text-align:right;">Total Amount (Rs)</th>
-                  </tr>
-                </thead>
-                <tbody id="rec-matrix-sales-tbody">
-                  <!-- Rendered dynamically -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Cutover & Transfer Action Card -->
-          <div class="chart-card" style="border: 2px solid #10b981; background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.02));">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1.25rem;">
-              <div style="flex:1; min-width:280px;">
-                <h2 style="color:#10b981; font-size:1.15rem; margin-bottom:0.4rem; display:flex; align-items:center; gap:0.5rem;">
-                  <i class="fa-solid fa-cloud-arrow-up"></i> Cutover & Transfer Reconciled Balances into Live System
-                </h2>
-                <p style="font-size:0.82rem; color:var(--text-main); margin:0; line-height:1.45;">
-                  Clicking this will automatically archive previous operational logs, set your Raw Material and Finished Goods opening balances to the verified cutover numbers above, populate the 1st April 2026 onwards purchase & sales registers, and download an automatic safety backup.
-                </p>
-              </div>
-
-              <div style="display:flex; flex-direction:column; gap:0.5rem; align-items:flex-end;">
-                <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.8rem; color:var(--text-muted);">
-                  <i class="fa-solid fa-shield-check" style="color:#10b981;"></i>
-                  <span>Pre-cutover backup JSON will auto-download for safety</span>
-                </div>
-                <button type="button" class="btn btn-success" id="btn-execute-cutover" onclick="app.executeInventoryCutover()" style="background:#10b981; font-size:1rem; font-weight:700; padding:0.75rem 1.75rem; border-radius:6px; box-shadow:0 4px 15px rgba(16, 185, 129, 0.35);">
-                  <i class="fa-solid fa-check-double"></i> Transfer & Set as Current Live Inventory
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==========================================
-           12. SYSTEM SETTINGS
-           ========================================== -->
-      <section id="settings-view" class="view-panel">
-        <div class="page-header">
-          <div class="header-title">
-            <h1>System Settings</h1>
-            <p>Calibrate system thresholds, import database backups, or toggle options.</p>
-          </div>
-        </div>
-
-        <div class="split-30-70">
-          <div class="chart-card">
-            <div class="card-title-bar">
-              <h2>Inventory Config</h2>
-            </div>
-            <div class="form-group">
-              <label>Default Scrap/Wastage (%)</label>
-              <input type="number" step="0.1" min="0" max="20" class="form-control" id="default-wastage-input" value="1.5">
-              <small class="td-muted" style="margin-top:0.4rem; display:block;">Multiplier applied to BOM ingredients during production runs (e.g. 1.5% waste).</small>
-            </div>
-          </div>
-
-          <div class="chart-card">
-            <div class="card-title-bar">
-              <h2>Backup & Restore Core Database</h2>
-            </div>
-            
-            <div class="alert-banner warning">
-              <i class="fa-solid fa-shield-halved"></i>
-              <div>
-                <strong>AetherERP runs entirely in your local browser storage.</strong> If you clear browser cache, your database will be reset. Always export backups regularly to avoid data loss.
-              </div>
-            </div>
-
-            <div style="display:flex; gap:1rem; margin-top: 1.5rem;">
-              <button class="btn btn-primary" onclick="app.exportDatabase()">
-                <i class="fa-solid fa-download"></i> Export Database Backup (JSON)
-              </button>
-              <button class="btn btn-secondary" onclick="document.getElementById('import-db-input').click()">
-                <i class="fa-solid fa-upload"></i> Restore Backup (JSON)
-              </button>
-              <input type="file" id="import-db-input" class="hidden-file-input" accept=".json" onchange="app.importDatabase(event)">
-            </div>
-          </div>
-          
-          <div class="chart-card" style="margin-top: 1.5rem; grid-column: 1 / -1;">
-            <div class="card-title-bar">
-              <h2>Supabase Cloud Database Settings (Sync Desktop + Phone)</h2>
-            </div>
-            
-            <div class="alert-banner info" style="margin-bottom: 1.25rem;">
-              <i class="fa-solid fa-cloud"></i>
-              <div>
-                Sync this laptop system with the Production Manager's Mobile Portal. Paste your Supabase credentials here. Use the Sync button to upload your local ingredients, products, and BOM recipes to the cloud.
-              </div>
-            </div>
-            
+          <form id="order-form" onsubmit="app.handleOrderSubmit(event)">
             <div class="form-row">
               <div class="form-group">
-                <label>Supabase Project URL</label>
-                <input type="text" class="form-control" id="settings-supabase-url" placeholder="https://xxxx.supabase.co">
+                <label>Order Date *</label>
+                <input type="date" class="form-control" id="order-date" required>
               </div>
               <div class="form-group">
-                <label>Supabase Anon API Key</label>
-                <input type="password" class="form-control" id="settings-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+                <label>Vendor / Supplier Name *</label>
+                <input type="text" class="form-control" id="order-vendor" placeholder="e.g. Agro Supplies Ltd" required>
               </div>
             </div>
+
+            <div style="margin-top:0.65rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Order Items / Materials *</label>
+                <div style="display:flex; align-items:center; gap:0.4rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="app.openAddMaterialModal('order')" style="font-size:0.68rem; padding:0.18rem 0.45rem; color:var(--color-primary); border:1px solid rgba(16,185,129,0.4); background:rgba(16,185,129,0.08); font-weight:600;">
+                    <i class="fa-solid fa-plus"></i> New Material
+                  </button>
+                  <span id="order-estimated-total" style="font-size:0.75rem; font-weight:700; color:var(--color-success);">Est. Total: Rs. 0.00</span>
+                </div>
+              </div>
+              
+              <div id="order-items-container">
+                <!-- Dynamically injected item rows -->
+              </div>
+
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.addOrderItemRow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                <i class="fa-solid fa-plus"></i> Add Another Material / Item
+              </button>
+            </div>
+
+            <button type="submit" id="order-submit-btn" class="btn btn-primary" style="padding: 0.65rem; margin-top:0.75rem;">
+              <i class="fa-solid fa-paper-plane"></i> Submit Order Request
+            </button>
+          </form>
+        </div>
+
+        <!-- WhatsApp Compile Box -->
+        <div class="whatsapp-widget hidden" id="order-wa-widget">
+          <h4><i class="fa-brands fa-whatsapp"></i> WhatsApp Order Request compiled</h4>
+          <textarea class="whatsapp-textarea" id="order-wa-text" readonly></textarea>
+          <div class="whatsapp-actions">
+            <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('order-wa-text')">
+              <i class="fa-solid fa-copy"></i> Copy Text
+            </button>
+            <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('order-wa-text')">
+              <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+            </button>
+          </div>
+        </div>
+
+        <!-- Recent outstanding orders list -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Outstanding Pending Orders</span>
+          </div>
+          <div class="stock-cover-list" id="order-list-container" style="max-height: 200px; overflow-y:auto;">
+            <div class="td-muted italic text-center" style="padding:1rem;">No pending purchase orders.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           2. VIEW: INWARD & MATERIAL RETURN
+           ========================================== -->
+      <section id="view-inward" class="app-view">
+        <!-- Sub-section selector toggle -->
+        <div class="sub-tabs-bar" style="margin-bottom:0.75rem;">
+          <div class="sub-tab-btn active" id="btn-inward-raw" onclick="app.switchInwardSubSection('raw')">
+            <i class="fa-solid fa-truck-ramp-box"></i> Raw Inward
+          </div>
+          <div class="sub-tab-btn" id="btn-inward-debit" onclick="app.switchInwardSubSection('debit')">
+            <i class="fa-solid fa-file-circle-minus"></i> Vendor Debit Note
+          </div>
+          <div class="sub-tab-btn" id="btn-inward-return" onclick="app.switchInwardSubSection('return')">
+            <i class="fa-solid fa-rotate-left"></i> Customer Return
+          </div>
+        </div>
+
+        <!-- 2A. SUB-SECTION: RAW MATERIAL INWARD -->
+        <div id="inward-raw-section">
+          <div class="ui-card">
+            <div class="card-title">
+              <span><i class="fa-solid fa-circle-down"></i> Log Material Inward</span>
+            </div>
             
-            <div style="display:flex; gap:1rem; margin-top: 1.5rem;">
-              <button class="btn btn-primary" onclick="app.saveSupabaseConfig()">
-                <i class="fa-solid fa-floppy-disk"></i> Save & Connect Cloud
+            <div class="mobile-dropzone" id="inward-dropzone">
+              <div class="dropzone-icon"><i class="fa-solid fa-file-invoice"></i></div>
+              <div class="dropzone-text">
+                <h3>Upload or Snap Inward Bill</h3>
+                <p>Supports PDF, JPEG, PNG, GIF, BMP, or direct camera photo.</p>
+              </div>
+              <div style="display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap; margin-top:0.65rem;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('inward-camera-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-camera"></i> Click Photo
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('inward-file-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-folder-open"></i> Upload PDF / Image
+                </button>
+              </div>
+              <input type="file" id="inward-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleInwardUpload(this.files[0])">
+              <input type="file" id="inward-file-input" class="hidden" accept=".pdf,image/jpeg,image/png,image/gif,image/bmp,image/webp,.jpg,.jpeg,.png,.gif,.bmp" onchange="app.handleInwardUpload(this.files[0])">
+            </div>
+
+            <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
+
+            <!-- Multi-Order Quick Link Button -->
+            <button type="button" class="btn btn-secondary btn-sm" onclick="app.openSelectOrdersModal()" style="width:100%; margin-bottom:0.75rem; border:1px solid rgba(16, 185, 129, 0.4); background:rgba(16, 185, 129, 0.08); color:var(--color-primary); font-weight:600; padding:0.55rem; font-size:0.8rem; display:flex; align-items:center; justify-content:center; gap:0.5rem;">
+              <i class="fa-solid fa-list-check"></i> Link Multiple Pending Orders to this Inward
+            </button>
+
+            <form id="inward-manual-form" onsubmit="app.handleManualInwardSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Bill / Invoice Reference *</label>
+                  <input type="text" class="form-control" id="inward-invoice" placeholder="e.g. INV-9034" required>
+                </div>
+                <div class="form-group">
+                  <label>Inward Date *</label>
+                  <input type="date" class="form-control" id="inward-date" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Supplier / Vendor *</label>
+                <input type="text" class="form-control" id="inward-supplier" placeholder="e.g. Agro Supplies Ltd" required>
+              </div>
+
+              <div style="margin-top:0.65rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                  <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Received Materials (Multiple Items) *</label>
+                  <div style="display:flex; align-items:center; gap:0.4rem;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="app.openAddMaterialModal('inward')" style="font-size:0.68rem; padding:0.18rem 0.45rem; color:var(--color-primary); border:1px solid rgba(16,185,129,0.4); background:rgba(16,185,129,0.08); font-weight:600;">
+                      <i class="fa-solid fa-plus"></i> New Material
+                    </button>
+                    <span id="inward-total-amount" style="font-size:0.75rem; font-weight:700; color:var(--color-success);">Total: Rs. 0.00</span>
+                  </div>
+                </div>
+
+                <div id="inward-items-container">
+                  <!-- Dynamically injected inward item rows -->
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addInwardItemRow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                  <i class="fa-solid fa-plus"></i> Add Another Received Material
+                </button>
+              </div>
+
+              <button type="submit" id="inward-submit-btn" class="btn btn-primary" style="padding:0.65rem; margin-top:0.75rem;">
+                <i class="fa-solid fa-check-double"></i> Commit Inward & Verify
               </button>
-              <button class="btn btn-secondary" onclick="app.syncLocalDataToSupabase()" id="sync-cloud-btn">
-                <i class="fa-solid fa-cloud-arrow-up"></i> Push Laptop Data to Cloud Database
+            </form>
+          </div>
+
+          <!-- WhatsApp Variance Warning Widget -->
+          <div class="whatsapp-widget hidden" id="inward-wa-widget">
+            <h4 style="color: var(--color-danger);"><i class="fa-brands fa-whatsapp"></i> WhatsApp Variance Alert Compiled</h4>
+            <textarea class="whatsapp-textarea" id="inward-wa-text" readonly style="border-color: rgba(239, 68, 68, 0.2);"></textarea>
+            <div class="whatsapp-actions">
+              <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('inward-wa-text')">
+                <i class="fa-solid fa-copy"></i> Copy Text
               </button>
+              <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('inward-wa-text')">
+                <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2B. SUB-SECTION: VENDOR DEBIT NOTE (DEFECTIVE / REJECTED MATERIAL) -->
+        <div id="inward-debit-section" class="hidden">
+          <div class="ui-card">
+            <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+              <span><i class="fa-solid fa-file-circle-minus" style="color:var(--color-danger);"></i> Issue Vendor Debit Note</span>
+              <span class="badge" style="background:rgba(239,68,68,0.15); color:var(--color-danger); font-size:0.68rem; padding:0.15rem 0.45rem; border-radius:4px; font-weight:600;">Defective Goods</span>
+            </div>
+
+            <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">
+              Record defective or rejected raw materials received from a supplier. Automatically compiles an official signed Debit Note in PDF format, deducts stock from inventory, and prepares WhatsApp notices.
+            </p>
+
+            <form id="debit-note-form" onsubmit="app.handleDebitNoteSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Debit Note No *</label>
+                  <input type="text" class="form-control" id="dn-number" placeholder="e.g. MFP-DN-26-001" required>
+                </div>
+                <div class="form-group">
+                  <label>Date *</label>
+                  <input type="date" class="form-control" id="dn-date" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Vendor / Supplier Name *</label>
+                  <input type="text" class="form-control" id="dn-vendor" placeholder="e.g. Agro Supplies Ltd" required list="dn-vendor-datalist">
+                  <datalist id="dn-vendor-datalist"></datalist>
+                </div>
+                <div class="form-group">
+                  <label>Vendor GSTIN</label>
+                  <input type="text" class="form-control" id="dn-vendor-gst" placeholder="e.g. 24AABCU9603R1ZM">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Original Bill / Inward Ref</label>
+                  <input type="text" class="form-control" id="dn-inward-ref" placeholder="e.g. INV-9034 / PO-102">
+                </div>
+                <div class="form-group">
+                  <label>Defect / Rejection Reason *</label>
+                  <input type="text" class="form-control" id="dn-reason" placeholder="e.g. Broken seal / Leakage / Substandard" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Vendor Address</label>
+                <input type="text" class="form-control" id="dn-vendor-address" placeholder="Vendor factory or registered address">
+              </div>
+
+              <!-- Multi-Item Defective Goods Builder -->
+              <div style="margin-top:0.75rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                  <label style="margin:0; font-weight:600; font-size:0.8rem; color:var(--color-danger);"><i class="fa-solid fa-boxes-stacked"></i> Defective Items Returned *</label>
+                  <div style="display:flex; align-items:center; gap:0.4rem;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="app.openAddMaterialModal('debit')" style="font-size:0.68rem; padding:0.18rem 0.45rem; color:var(--color-primary); border:1px solid rgba(16,185,129,0.4); background:rgba(16,185,129,0.08); font-weight:600;">
+                      <i class="fa-solid fa-plus"></i> New Material
+                    </button>
+                    <span id="dn-total-amount" style="font-size:0.75rem; font-weight:700; color:var(--color-danger);">Total: Rs. 0.00</span>
+                  </div>
+                </div>
+
+                <div id="debit-items-container">
+                  <!-- Dynamically populated debit note item rows -->
+                </div>
+
+                <button type="button" id="btn-add-defective-item" class="btn btn-secondary btn-sm" onclick="app.addDebitNoteItemRow()" style="margin-top:0.45rem; width:100%; border:1px dashed var(--color-danger); color:var(--color-danger); background:rgba(239,68,68,0.06); padding:0.5rem; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:0.4rem; border-radius:6px;">
+                  <i class="fa-solid fa-plus-circle"></i> Add Defective Material / Item
+                </button>
+              </div>
+
+              <!-- Defect Photo Evidence Capture -->
+              <div class="form-group" style="margin-top:0.85rem; border-top:1px dashed var(--border-color); padding-top:0.65rem;">
+                <label><i class="fa-solid fa-camera"></i> Defect Photo / Proof of Damage (Optional)</label>
+                <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('dn-camera-input').click()" style="padding:0.4rem 0.6rem; font-size:0.75rem;">
+                    <i class="fa-solid fa-camera"></i> Click Photo
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('dn-file-input').click()" style="padding:0.4rem 0.6rem; font-size:0.75rem;">
+                    <i class="fa-solid fa-folder-open"></i> Browse File
+                  </button>
+                  <input type="file" id="dn-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleDebitNotePhoto(this.files[0])">
+                  <input type="file" id="dn-file-input" class="hidden" accept="image/*" onchange="app.handleDebitNotePhoto(this.files[0])">
+                  <span id="dn-photo-status" style="font-size:0.7rem; color:var(--text-dim); margin-left:4px;">No photo selected</span>
+                </div>
+                <div id="dn-photo-preview-wrap" style="display:none; margin-top:0.4rem; position:relative; display:inline-block;">
+                  <img id="dn-photo-preview" src="" alt="Defect Proof" style="max-height:85px; max-width:140px; border-radius:6px; border:1px solid var(--border-color); object-fit:contain; cursor:pointer;" onclick="window.open(this.src, '_blank')">
+                  <button type="button" onclick="app.removeDebitNotePhoto()" style="position:absolute; top:-6px; right:-6px; background:#ef4444; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:12px; cursor:pointer; line-height:1; display:flex; align-items:center; justify-content:center;" title="Remove Photo">&times;</button>
+                </div>
+              </div>
+
+              <!-- Inventory stock adjustment checkbox -->
+              <div style="margin-top:0.65rem; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); border-radius:6px; padding:0.5rem 0.65rem; display:flex; align-items:flex-start; gap:0.5rem;">
+                <input type="checkbox" id="dn-deduct-stock" checked style="margin-top:2px;">
+                <label for="dn-deduct-stock" style="margin:0; font-size:0.72rem; color:var(--text-main); font-weight:500; cursor:pointer;">
+                  <strong>Deduct returned quantity from Raw Material Stock</strong> so defective materials cannot be consumed in production batches.
+                </label>
+              </div>
+
+              <div class="form-group" style="margin-top:0.65rem;">
+                <label>Additional Notes / Return Remarks</label>
+                <input type="text" class="form-control" id="dn-notes" placeholder="e.g. Handed back to transporter, balance to be adjusted against future PO">
+              </div>
+
+              <button type="submit" id="dn-submit-btn" class="btn btn-primary" style="padding:0.75rem; margin-top:0.75rem; width:100%; background: #dc2626; border-color: #b91c1c;">
+                <i class="fa-solid fa-file-signature"></i> Save & Generate Signed Debit Note
+              </button>
+            </form>
+          </div>
+
+          <!-- WhatsApp Variance Alert for Debit Note -->
+          <div class="whatsapp-widget hidden" id="dn-wa-widget">
+            <h4 style="color: var(--color-danger);"><i class="fa-brands fa-whatsapp"></i> WhatsApp Vendor Debit Notice Compiled</h4>
+            <textarea class="whatsapp-textarea" id="dn-wa-text" readonly style="border-color: rgba(239, 68, 68, 0.2);"></textarea>
+            <div class="whatsapp-actions">
+              <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('dn-wa-text')">
+                <i class="fa-solid fa-copy"></i> Copy Notice
+              </button>
+              <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('dn-wa-text')">
+                <i class="fa-brands fa-whatsapp"></i> Send via WhatsApp
+              </button>
+            </div>
+          </div>
+
+          <!-- Recent Debit Notes Issued Card -->
+          <div class="ui-card" style="margin-top: 0.85rem;">
+            <div class="card-title">
+              <span><i class="fa-solid fa-clock-rotate-left"></i> Recently Issued Debit Notes</span>
+            </div>
+            <div id="recent-debit-notes-container" style="max-height: 240px; overflow-y:auto; display:flex; flex-direction:column; gap:0.5rem;">
+              <div class="td-muted italic text-center" style="padding:0.75rem;">No debit notes issued yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2C. SUB-SECTION: MATERIAL RETURNED (CREDIT NOTE) -->
+        <div id="inward-return-section" class="hidden">
+          <div class="ui-card">
+            <div class="card-title">
+              <span><i class="fa-solid fa-rotate-left"></i> Customer Return / Credit Note</span>
+            </div>
+
+            <div class="mobile-dropzone" id="return-dropzone">
+              <div class="dropzone-icon" style="color:var(--color-warning);"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+              <div class="dropzone-text">
+                <h3>Upload or Snap Credit Note</h3>
+                <p>Supports Credit Note PDF, photos via camera, or receipt images.</p>
+              </div>
+              <div style="display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap; margin-top:0.65rem;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('return-camera-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-camera"></i> Click Photo
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('return-file-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-folder-open"></i> Upload Credit Note
+                </button>
+              </div>
+              <input type="file" id="return-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleCreditNoteUpload(this.files[0])">
+              <input type="file" id="return-file-input" class="hidden" accept=".pdf,image/jpeg,image/png,image/gif,image/bmp,image/webp,.jpg,.jpeg,.png,.gif,.bmp" onchange="app.handleCreditNoteUpload(this.files[0])">
+            </div>
+
+            <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or enter return manually --</div>
+
+            <form id="return-manual-form" onsubmit="app.handleReturnSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Credit Note / Ref Number *</label>
+                  <input type="text" class="form-control" id="return-credit-note-no" placeholder="e.g. CN-2026-042" required>
+                </div>
+                <div class="form-group">
+                  <label>Return Date *</label>
+                  <input type="date" class="form-control" id="return-date" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Customer / Client Name *</label>
+                  <input type="text" class="form-control" id="return-customer" placeholder="e.g. Krishna Enterprises" required>
+                </div>
+                <div class="form-group">
+                  <label>Reason for Return</label>
+                  <input type="text" class="form-control" id="return-reason" placeholder="e.g. Excess stock / Store return">
+                </div>
+              </div>
+
+              <div style="margin-top:0.65rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                  <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Returned Finished Goods (Multiple SKUs) *</label>
+                  <span id="return-total-qty" style="font-size:0.75rem; font-weight:700; color:var(--color-warning);">0 pcs total</span>
+                </div>
+
+                <div id="return-items-container">
+                  <!-- Dynamically injected return SKU rows -->
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addReturnItemRow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                  <i class="fa-solid fa-plus"></i> Add Another Returned FG SKU
+                </button>
+              </div>
+
+              <div class="alert-strip" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); color: #f59e0b; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.75rem; margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>Returned items will be directly added back into <strong>Finished Goods (FG) Warehouse Stock</strong>.</span>
+              </div>
+
+              <button type="submit" id="return-submit-btn" class="btn btn-primary" style="padding:0.65rem; margin-top:0.75rem; background: #f59e0b; border-color: #d97706;">
+                <i class="fa-solid fa-rotate-left"></i> Restock Finished Goods from Credit Note
+              </button>
+            </form>
+          </div>
+
+          <!-- WhatsApp Return Log Widget -->
+          <div class="whatsapp-widget hidden" id="return-wa-widget">
+            <h4 style="color: #f59e0b;"><i class="fa-brands fa-whatsapp"></i> WhatsApp Return Log Compiled</h4>
+            <textarea class="whatsapp-textarea" id="return-wa-text" readonly style="border-color: rgba(245, 158, 11, 0.3);"></textarea>
+            <div class="whatsapp-actions">
+              <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('return-wa-text')">
+                <i class="fa-solid fa-copy"></i> Copy Text
+              </button>
+              <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('return-wa-text')">
+                <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+              </button>
+            </div>
+          </div>
+
+          <!-- Recent returns list card -->
+          <div class="ui-card" style="margin-top:1rem;">
+            <div class="card-title">
+              <span><i class="fa-solid fa-clock-rotate-left"></i> Recent Finished Goods Returns</span>
+            </div>
+            <div id="return-history-list" style="max-height: 220px; overflow-y:auto; display:flex; flex-direction:column; gap:0.5rem;">
+              <div class="td-muted italic text-center" style="padding:0.75rem;">No material returns logged yet.</div>
             </div>
           </div>
         </div>
       </section>
 
-    </main>
+      <!-- ==========================================
+           3. VIEW: DAILY PROCESSING / MANUFACTURING
+           ========================================== -->
+      <section id="view-production" class="app-view">
+        <div class="ui-card">
+          <div class="card-title">
+            <span><i class="fa-solid fa-gears"></i> Daily Production Batch</span>
+          </div>
+
+          <form id="production-form" onsubmit="app.handleProductionSubmit(event)">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Production Date *</label>
+                <input type="date" class="form-control" id="production-date" required>
+              </div>
+              <div class="form-group">
+                <label>Batch / Shift Reference</label>
+                <input type="text" class="form-control" id="production-batch-ref" placeholder="e.g. Day Shift / Batch A">
+              </div>
+            </div>
+
+            <!-- Sub-tabs for quick category filter when adding SKUs -->
+            <div class="sub-tabs-bar" style="margin-top:0.35rem; margin-bottom:0.5rem;">
+              <div class="sub-tab-btn active" data-cat="All" onclick="app.switchProductionCategory('All', this)">All Categories</div>
+              <div class="sub-tab-btn" data-cat="Bottles" onclick="app.switchProductionCategory('Bottles', this)">Bottles</div>
+              <div class="sub-tab-btn" data-cat="Pouches" onclick="app.switchProductionCategory('Pouches', this)">Pouches</div>
+              <div class="sub-tab-btn" data-cat="Sachets" onclick="app.switchProductionCategory('Sachets', this)">Sachet</div>
+              <div class="sub-tab-btn" data-cat="Horeca" onclick="app.switchProductionCategory('Horeca', this)">Horeca</div>
+            </div>
+
+            <div style="margin-top:0.4rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Finished Goods Produced (Multiple SKUs) *</label>
+                <span id="production-total-qty" style="font-size:0.75rem; font-weight:700; color:var(--color-primary);">0 pcs total</span>
+              </div>
+
+              <div id="production-items-container">
+                <!-- Dynamically injected SKU rows -->
+              </div>
+
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.addProductionSKURow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                <i class="fa-solid fa-plus"></i> Add Another Finished Good SKU
+              </button>
+            </div>
+
+            <!-- Material Forecast Cover Checklist (Aggregated across all SKUs) -->
+            <div style="background-color:rgba(0,0,0,0.25); padding:0.65rem; border-radius:6px; margin-top:0.75rem; margin-bottom:0.75rem; font-size:0.75rem; border:1px solid var(--border-color);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+                <div style="font-weight:bold; color:var(--text-muted); text-transform:uppercase; font-size:0.65rem;"><i class="fa-solid fa-clipboard-check"></i> Aggregated Raw Materials BOM Checklist</div>
+                <span id="production-checklist-status" style="font-size:0.65rem; font-weight:600; color:var(--text-dim);">0 SKUs evaluated</span>
+              </div>
+              <div id="production-checklist" style="display:flex; flex-direction:column; gap:0.35rem; max-height:160px; overflow-y:auto;">
+                <span class="td-muted italic">Add one or more SKUs above to evaluate raw material requirements.</span>
+              </div>
+            </div>
+
+            <button type="submit" id="production-submit-btn" class="btn btn-primary" style="padding:0.65rem;">
+              <i class="fa-solid fa-gears"></i> Record Daily Batch
+            </button>
+          </form>
+        </div>
+
+        <!-- WhatsApp Production Run Summary Widget -->
+        <div class="whatsapp-widget hidden" id="production-wa-widget">
+          <h4><i class="fa-brands fa-whatsapp"></i> Daily Production Batch Compiled</h4>
+          <textarea class="whatsapp-textarea" id="production-wa-text" readonly></textarea>
+          <div class="whatsapp-actions">
+            <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('production-wa-text')">
+              <i class="fa-solid fa-copy"></i> Copy Text
+            </button>
+            <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('production-wa-text')">
+              <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Stock Balance status card -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Raw Materials Stock Cover</span>
+          </div>
+          <div class="stock-cover-list" id="production-stock-container" style="max-height: 180px; overflow-y:auto;">
+            <!-- Loaded dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           4. VIEW: OUTWARD (SALES INVOICE & SAMPLE DISPATCH)
+           ========================================== -->
+      <section id="view-outward" class="app-view">
+        <!-- Sub-section selector toggle -->
+        <div class="sub-tabs-bar" style="margin-bottom:0.75rem;">
+          <div class="sub-tab-btn active" id="btn-outward-invoice" onclick="app.switchOutwardSubSection('invoice')">
+            <i class="fa-solid fa-file-invoice"></i> Sales Invoice Dispatch
+          </div>
+          <div class="sub-tab-btn" id="btn-outward-sample" onclick="app.switchOutwardSubSection('sample')">
+            <i class="fa-solid fa-gift"></i> Dispatch Sample (No Invoice)
+          </div>
+        </div>
+
+        <!-- 4A. SUB-SECTION: SALES INVOICE DISPATCH -->
+        <div id="outward-invoice-section">
+          <div class="ui-card">
+            <div class="card-title">
+              <span><i class="fa-solid fa-circle-up"></i> Sales Invoice Dispatch</span>
+            </div>
+
+            <div class="mobile-dropzone" id="outward-dropzone">
+              <div class="dropzone-icon"><i class="fa-solid fa-file-invoice"></i></div>
+              <div class="dropzone-text">
+                <h3>Upload or Snap Sales Invoice</h3>
+                <p>Supports PDF, camera photos, or bill images (single or multi-invoice batch).</p>
+              </div>
+              <div style="display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap; margin-top:0.65rem;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('outward-camera-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-camera"></i> Click Photo
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('outward-file-input').click()" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">
+                  <i class="fa-solid fa-folder-open"></i> Upload PDF / Image
+                </button>
+              </div>
+              <input type="file" id="outward-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleOutwardUpload(this.files[0])">
+              <input type="file" id="outward-file-input" class="hidden" accept=".pdf,image/jpeg,image/png,image/gif,image/bmp,image/webp,.jpg,.jpeg,.png,.gif,.bmp" multiple onchange="app.handleOutwardUploadMultiple(this.files)">
+            </div>
+
+            <div style="text-align: center; margin: 0.5rem 0; font-size:0.75rem; color:var(--text-dim);">-- or fill manually --</div>
+
+            <form id="outward-manual-form" onsubmit="app.handleManualOutwardSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Sales Invoice Number *</label>
+                  <input type="text" class="form-control" id="outward-invoice" placeholder="e.g. IN-1002" required>
+                </div>
+                <div class="form-group">
+                  <label>Dispatch Date *</label>
+                  <input type="date" class="form-control" id="outward-date" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Select Product *</label>
+                <select class="form-control" id="outward-product" required>
+                  <!-- Loaded dynamically -->
+                </select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Dispatch Quantity (pcs) *</label>
+                  <input type="number" min="1" class="form-control" id="outward-qty" placeholder="Pieces shipped" required>
+                </div>
+                <div class="form-group">
+                  <label>Unit Price (Rs.) *</label>
+                  <input type="number" min="0" step="0.01" class="form-control" id="outward-price" placeholder="Selling price" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Customer Name *</label>
+                <input type="text" class="form-control" id="outward-customer" placeholder="e.g. FreshMart Distributors" required>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="padding:0.65rem;">
+                <i class="fa-solid fa-truck-dispatch"></i> Dispatch finished goods
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 4B. SUB-SECTION: SAMPLE DISPATCH (NO INVOICE) -->
+        <div id="outward-sample-section" style="display:none;">
+          <div class="ui-card">
+            <div class="card-title">
+              <span><i class="fa-solid fa-gift" style="color:var(--color-warning);"></i> Dispatch Sample (No Invoice)</span>
+            </div>
+
+            <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:0.55rem 0.75rem; margin-bottom:0.75rem; font-size:0.75rem; color:var(--text-main);">
+              <i class="fa-solid fa-circle-info" style="color:var(--color-warning); margin-right:0.35rem;"></i>
+              Record promotional & tasting sample orders dispatched without invoice. Deducts warehouse stock count without billing.
+            </div>
+
+            <form id="sample-dispatch-form" onsubmit="app.handleSampleSubmit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Dispatched To / Recipient *</label>
+                  <input type="text" class="form-control" id="sample-recipient" placeholder="e.g. Reliance Retail Sample / Chef Vikram" required>
+                </div>
+                <div class="form-group">
+                  <label>Dispatch Date *</label>
+                  <input type="date" class="form-control" id="sample-date" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Courier / Handover Ref (Optional)</label>
+                  <input type="text" class="form-control" id="sample-courier" placeholder="e.g. Handed over / DTDC AWB #892">
+                </div>
+                <div class="form-group">
+                  <label>Sample Purpose / Notes (Optional)</label>
+                  <input type="text" class="form-control" id="sample-notes" placeholder="e.g. Tasting trial for menu selection">
+                </div>
+              </div>
+
+              <!-- Quick category filter for packaging type: Bottles / Pouches / Sachet -->
+              <div style="margin-top:0.4rem; margin-bottom:0.3rem;">
+                <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.3rem; display:block;">
+                  Select Packaging Type (Filter SKUs)
+                </label>
+                <div class="sub-tabs-bar" id="sample-cat-tabs" style="margin-bottom:0.5rem;">
+                  <div class="sub-tab-btn active" data-cat="All" onclick="app.switchSampleCategory('All', this)">All SKUs</div>
+                  <div class="sub-tab-btn" data-cat="Bottles" onclick="app.switchSampleCategory('Bottles', this)">🍼 Bottles</div>
+                  <div class="sub-tab-btn" data-cat="Pouches" onclick="app.switchSampleCategory('Pouches', this)">📦 Pouches</div>
+                  <div class="sub-tab-btn" data-cat="Sachets" onclick="app.switchSampleCategory('Sachets', this)">🧂 Sachet</div>
+                </div>
+              </div>
+
+              <!-- Multi-Item Sample SKUs Container -->
+              <div style="margin-top:0.35rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+                  <label style="margin:0; font-weight:600; font-size:0.8rem;"><i class="fa-solid fa-boxes-stacked"></i> Sample Items to Dispatch *</label>
+                  <span id="sample-total-qty" style="font-size:0.75rem; font-weight:700; color:var(--color-warning);">0 pcs total</span>
+                </div>
+
+                <div id="sample-items-container">
+                  <!-- Dynamically populated SKU rows -->
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addSampleItemRow()" style="margin-top:0.4rem; width:100%; border-style:dashed; padding:0.4rem;">
+                  <i class="fa-solid fa-plus"></i> Add Another Sample SKU
+                </button>
+              </div>
+
+              <!-- Optional Photo of Sample Box / Courier Receipt -->
+              <div style="margin-top:0.75rem; padding-top:0.65rem; border-top:1px solid var(--border-light);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <label style="margin:0; font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-camera"></i> Sample Box / Slip Photo (Optional)</label>
+                  <div style="display:flex; gap:0.4rem;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('sample-camera-input').click()" style="font-size:0.72rem; padding:0.2rem 0.45rem;">
+                      <i class="fa-solid fa-camera"></i> Camera
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('sample-file-input').click()" style="font-size:0.72rem; padding:0.2rem 0.45rem;">
+                      <i class="fa-solid fa-folder-open"></i> Upload
+                    </button>
+                  </div>
+                </div>
+                <input type="file" id="sample-camera-input" class="hidden" accept="image/*" capture="environment" onchange="app.handleSamplePhoto(this.files[0])">
+                <input type="file" id="sample-file-input" class="hidden" accept="image/*" onchange="app.handleSamplePhoto(this.files[0])">
+
+                <div id="sample-photo-preview-container" style="display:none; margin-top:0.4rem; text-align:center; background:rgba(0,0,0,0.25); padding:0.35rem; border-radius:6px;">
+                  <img id="sample-photo-preview" src="" alt="Sample Photo" style="max-height:80px; max-width:100%; border-radius:4px; object-fit:contain;">
+                  <div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.15rem;">Sample photo attached</div>
+                </div>
+              </div>
+
+              <button type="submit" id="sample-submit-btn" class="btn btn-primary" style="margin-top:0.85rem; padding:0.7rem; font-weight:700; background:linear-gradient(135deg, #f59e0b, #d97706); border-color:#d97706;">
+                <i class="fa-solid fa-gift"></i> Dispatch Free Sample & Deduct Stock
+              </button>
+            </form>
+          </div>
+
+          <!-- Sample WhatsApp Widget -->
+          <div class="ui-card hidden" id="sample-wa-widget" style="margin-top:1rem; border:1px solid rgba(37,211,102,0.35);">
+            <div class="card-title">
+              <span><i class="fa-brands fa-whatsapp" style="color:#25d366;"></i> WhatsApp Sample Dispatch Summary</span>
+            </div>
+            <textarea id="sample-wa-text" class="wa-textarea" readonly rows="7"></textarea>
+            <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+              <button class="btn btn-secondary btn-sm" onclick="app.copyToClipboard('sample-wa-text')">
+                <i class="fa-solid fa-copy"></i> Copy Text
+              </button>
+              <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('sample-wa-text')">
+                <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Finished Goods Stock status card -->
+        <div class="ui-card">
+          <div class="card-title">
+            <span>Finished Goods Available</span>
+          </div>
+          <div class="stock-cover-list" id="outward-stock-container" style="max-height: 180px; overflow-y:auto;">
+            <!-- Loaded dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           5. VIEW: REAL-TIME STOCK STATUS & BUFFER
+           ========================================== -->
+      <section id="view-status" class="app-view">
+        <div class="ui-card">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+            <span><i class="fa-solid fa-chart-pie"></i> Inventory & Stock Status</span>
+            <span class="badge" style="font-size:0.7rem; background:rgba(16, 185, 129, 0.15); color:#10b981;">Starting: 7-Nov-2026</span>
+          </div>
+          
+          <!-- Primary Separate Tabs: Raw Material vs Finished Goods -->
+          <div class="status-primary-nav">
+            <button type="button" class="status-main-tab-btn active" id="btn-status-tab-rm" onclick="app.switchStatusMainTab('raw_materials')">
+              <div style="font-size:0.92rem; font-weight:800; display:flex; align-items:center; justify-content:center; gap:0.35rem;">
+                <i class="fa-solid fa-leaf" style="color:#10b981;"></i> Raw Materials
+              </div>
+              <div class="badge" id="badge-rm-deficit-count" style="margin-top:0.25rem; font-size:0.68rem; background:rgba(239, 68, 68, 0.2); color:#ef4444; font-weight:700;">
+                ⚠️ 0 To Order
+              </div>
+            </button>
+            <button type="button" class="status-main-tab-btn" id="btn-status-tab-fg" onclick="app.switchStatusMainTab('finished_goods')">
+              <div style="font-size:0.92rem; font-weight:800; display:flex; align-items:center; justify-content:center; gap:0.35rem;">
+                <i class="fa-solid fa-boxes-stacked" style="color:#a855f7;"></i> Finished Goods
+              </div>
+              <div class="badge" id="badge-fg-deficit-count" style="margin-top:0.25rem; font-size:0.68rem; background:rgba(239, 68, 68, 0.2); color:#ef4444; font-weight:700;">
+                ⚠️ 0 To Produce
+              </div>
+            </button>
+          </div>
+
+          <!-- Secondary Filter Bar (To Order/Produce vs All Items + Category & Search) -->
+          <div style="display:flex; flex-direction:column; gap:0.45rem; margin-bottom:0.65rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.4rem;">
+              <div class="sub-tabs-header" style="flex:1.2; margin:0; padding:0.18rem; gap:0.2rem;">
+                <button type="button" class="sub-tab-btn active" id="btn-status-sub-deficit" onclick="app.setStatusSubFilter('deficit')">
+                  <span id="lbl-status-sub-deficit">⚠️ Need to Order</span>
+                </button>
+                <button type="button" class="sub-tab-btn" id="btn-status-sub-all" onclick="app.setStatusSubFilter('all')">
+                  <span id="lbl-status-sub-all">📋 All Materials</span>
+                </button>
+              </div>
+              <div style="flex:0.9;">
+                <select class="form-control" id="status-category-filter" onchange="app.renderStatusPane()" style="font-size:0.75rem; padding:0.35rem 0.4rem; height:auto;">
+                  <option value="all">All Categories</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Search Input -->
+            <div style="position:relative;">
+              <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:0.65rem; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:0.75rem;"></i>
+              <input type="text" class="form-control" id="status-search-input" placeholder="Search by name, code or SKU..." oninput="app.renderStatusPane()" style="font-size:0.78rem; padding:0.38rem 0.5rem 0.38rem 1.8rem; height:auto;">
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="table-container" style="max-height: 480px; overflow-x:auto; overflow-y:auto; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background:var(--bg-card);">
+            <table class="status-table" id="status-table">
+              <thead id="status-table-head">
+                <!-- Dynamically generated for RM or FG -->
+              </thead>
+              <tbody id="status-table-body">
+                <!-- Dynamically populated rows -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Quick Summary Counter under Table -->
+          <div id="status-table-summary" style="display:flex; justify-content:space-between; align-items:center; margin-top:0.5rem; font-size:0.73rem; color:var(--text-muted); padding:0 0.2rem;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <div class="nav-tab active" data-target="view-order" onclick="app.switchView('view-order', this)">
+        <i class="fa-solid fa-cart-shopping"></i>
+        <span>1. Order</span>
+      </div>
+      <div class="nav-tab" data-target="view-inward" onclick="app.switchView('view-inward', this)">
+        <i class="fa-solid fa-circle-down"></i>
+        <span>2. Inward</span>
+      </div>
+      <div class="nav-tab" data-target="view-production" onclick="app.switchView('view-production', this)">
+        <i class="fa-solid fa-gears"></i>
+        <span>3. Production</span>
+      </div>
+      <div class="nav-tab" data-target="view-outward" onclick="app.switchView('view-outward', this)">
+        <i class="fa-solid fa-truck-dispatch"></i>
+        <span>4. Outward</span>
+      </div>
+      <div class="nav-tab" data-target="view-status" onclick="app.switchView('view-status', this)">
+        <i class="fa-solid fa-chart-pie"></i>
+        <span>5. Status</span>
+      </div>
+    </nav>
   </div>
 
   <!-- MODALS -->
 
-  <!-- A. EXCEL HEADER MAPPING MODAL -->
-  <div class="modal-overlay" id="column-mapper-modal">
-    <div class="modal-content">
+  <!-- A. SETTINGS & CLOUD SYNC CONFIG MODAL -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal-content" style="max-width: 380px;">
       <div class="modal-header">
-        <h2>Map Excel Headers</h2>
-        <button class="modal-close" onclick="app.closeModal('column-mapper-modal')">&times;</button>
+        <h2>Supabase Cloud Database Settings</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-settings')">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="alert-strip" style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--border-medium); padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.85rem; display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
-          <i class="fa-solid fa-circle-info" style="color: var(--color-primary); margin-top: 0.1rem;"></i>
-          <span>Verify matching column headers from your uploaded Excel sheet. Skip non-essential headers.</span>
-        </div>
-        <div class="mapping-grid" id="excel-mapping-container">
-          <!-- Populated Dynamically -->
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="app.closeModal('column-mapper-modal')">Cancel</button>
-        <button class="btn btn-primary" onclick="app.commitFinanceImport()">Process & Import Transactions</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- B. ADD RAW MATERIAL MODAL -->
-  <div class="modal-overlay" id="material-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="material-modal-title">Configure Raw Material</h2>
-        <button class="modal-close" onclick="app.closeModal('material-modal')">&times;</button>
-      </div>
-      <form id="material-form" onsubmit="event.preventDefault(); app.saveMaterial();">
-        <input type="hidden" id="material-form-id">
-        
+      <form id="settings-form" onsubmit="app.saveSettings(event)">
         <div class="modal-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Material Code / SKU *</label>
-              <input type="text" class="form-control" id="material-code" placeholder="e.g. RM-CHILLI" required>
-            </div>
-            <div class="form-group">
-              <label>Material Name *</label>
-              <input type="text" class="form-control" id="material-name" placeholder="e.g. Ground Red Chilli" required>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Opening Stock Qty</label>
-              <input type="number" step="0.001" min="0" class="form-control" id="material-stock" placeholder="e.g. 10.0">
-            </div>
-            <div class="form-group">
-              <label>Stock Unit *</label>
-              <select class="form-control" id="material-unit" required>
-                <option value="kg">kilograms (kg)</option>
-                <option value="g">grams (g)</option>
-                <option value="Pieces">Pieces (pcs)</option>
-                <option value="Liters">Liters (L)</option>
-                <option value="Boxes">Boxes</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Opening Avg Purchase Cost (Rs.)</label>
-              <input type="number" step="0.01" min="0" class="form-control" id="material-rate" placeholder="e.g. 240.00">
-            </div>
-            <div class="form-group">
-              <label>Min stock alert level</label>
-              <input type="number" step="0.001" min="0" class="form-control" id="material-min-stock" placeholder="e.g. 5.0" value="5">
-            </div>
+          <div class="alert-banner warning" style="margin-bottom: 1rem;">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Set up Supabase URL and Key to sync this mobile console with your main cloud ledger database.</span>
           </div>
 
           <div class="form-group">
-            <label>Item Description / Specifications</label>
-            <textarea class="form-control" id="material-desc" rows="3" placeholder="Additional material details..."></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" onclick="app.closeModal('material-modal')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Material</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- C. CONFIGURE PRODUCT & BOM RECIPE MODAL -->
-  <div class="modal-overlay" id="product-modal">
-    <div class="modal-content" style="max-width: 780px;">
-      <div class="modal-header">
-        <h2 id="product-modal-title">Configure Product & BOM Recipe</h2>
-        <button class="modal-close" onclick="app.closeModal('product-modal')">&times;</button>
-      </div>
-      <form id="product-form" onsubmit="event.preventDefault(); app.saveProduct();">
-        <input type="hidden" id="product-form-id">
-        
-        <div class="modal-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Product Code / SKU *</label>
-              <input type="text" class="form-control" id="product-code" placeholder="e.g. FG-PERI-100G" required>
-            </div>
-            <div class="form-group">
-              <label>Product Name *</label>
-              <input type="text" class="form-control" id="product-name" placeholder="e.g. Peri Peri Sauce 100g Bottle" required>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>MRP / Retail Price (Rs.) *</label>
-              <input type="number" step="0.01" class="form-control" id="product-price" placeholder="e.g. 150.00" required>
-            </div>
-            <div class="form-group">
-              <label>Selling Price (Rs.) *</label>
-              <input type="number" step="0.01" class="form-control" id="product-selling-price" placeholder="e.g. 135.00" required>
-            </div>
+            <label>Supabase URL</label>
+            <input type="text" class="form-control" id="set-sup-url" placeholder="https://xxxx.supabase.co">
           </div>
 
           <div class="form-group">
-            <label>Product Description</label>
-            <textarea class="form-control" id="product-desc" rows="2" placeholder="Describe the finished good..."></textarea>
+            <label>Supabase Anon API Key</label>
+            <input type="password" class="form-control" id="set-sup-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
           </div>
 
-          <!-- BOM Ingredients Recipe Editor -->
-          <div style="border-top:1px solid var(--border-light); margin-top:1.5rem; padding-top:1rem;">
-            <h3 style="font-size:0.95rem; font-weight:600; margin-bottom:0.75rem;"><i class="fa-solid fa-list-check"></i> Build BOM Ingredients Recipe</h3>
-            
-            <div style="display:flex; gap:0.5rem; background-color: rgba(255,255,255,0.01); padding:0.75rem; border-radius:6px; border:1px solid var(--border-light);">
-              <select class="form-control" id="bom-add-material" style="flex: 2;">
-                <!-- Loaded dynamically -->
-              </select>
-              <input type="number" step="0.0001" class="form-control" id="bom-add-qty" placeholder="Qty" style="flex: 1; max-width:100px;">
-              <input type="number" step="0.1" class="form-control" id="bom-add-wastage" placeholder="Waste %" style="flex: 1; max-width:100px;" value="1.5">
-              <button type="button" class="btn btn-primary" onclick="app.addBOMRowItem()">
-                <i class="fa-solid fa-plus"></i> Add
-              </button>
-            </div>
-
-            <!-- Temporary BOM Ingredients Table -->
-            <div class="bom-builder-list" id="bom-builder-items-list">
-              <!-- Rendered dynamically -->
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" onclick="app.closeModal('product-modal')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Product & Recipe</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- D. PURCHASE PDF INVOICE VERIFICATION MODAL -->
-  <div class="modal-overlay" id="purchase-verify-modal">
-    <div class="modal-content" style="max-width: 820px;">
-      <div class="modal-header">
-        <h2>Verify Extracted Purchase Items</h2>
-        <button class="modal-close" onclick="app.closeModal('purchase-verify-modal')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-row" style="margin-bottom: 1.25rem;">
-          <div class="form-group">
-            <label>Invoice Number *</label>
-            <input type="text" class="form-control" id="verify-purchase-invoice">
-          </div>
-          <div class="form-group">
-            <label>Invoice Date *</label>
-            <input type="date" class="form-control" id="verify-purchase-date">
-          </div>
-        </div>
-
-        <div class="table-container" style="max-height: 320px; overflow-y:auto; border:1px solid var(--border-light); border-radius:6px;">
-          <table class="custom-table" style="font-size:0.85rem;">
-            <thead>
-              <tr>
-                <th style="width:50%;">Map Extracted Text Line to Raw Material SKU *</th>
-                <th style="width:20%;">Quantity Received *</th>
-                <th style="width:20%;">Purchase Rate (Rs.) *</th>
-                <th style="width:10%; text-align:center;">Action</th>
-              </tr>
-            </thead>
-            <tbody id="verify-purchase-table-body">
-              <!-- Dynamically populated -->
-            </tbody>
-          </table>
-        </div>
-
-        <button type="button" class="btn btn-secondary btn-sm" onclick="app.addVerifyPurchaseRow()" style="margin-top: 0.75rem;">
-          <i class="fa-solid fa-plus"></i> Add Line Item
-        </button>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="app.closeModal('purchase-verify-modal')">Discard</button>
-        <button class="btn btn-primary" onclick="app.postVerifyPurchase()">Commit Purchase & Restock</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- E. SALES PDF INVOICE VERIFICATION MODAL -->
-  <!-- E. SALES PDF INVOICE VERIFICATION MODAL -->
-  <div class="modal-overlay" id="sale-verify-modal">
-    <div class="modal-content" style="max-width: 900px;">
-      <div class="modal-header">
-        <h2 id="sale-verify-modal-title">Verify Sales Invoice Dispatch</h2>
-        <button class="modal-close" onclick="app.closeModal('sale-verify-modal')">&times;</button>
-      </div>
-      <div class="modal-body" style="display:flex; flex-direction:column; gap:1rem;">
-        
-        <!-- Multi-Invoice Batch Navigation Strip -->
-        <div id="sale-batch-nav" style="display:none; justify-content:space-between; align-items:center; background: rgba(255,255,255,0.03); border:1px solid var(--border-light); border-radius:6px; padding:0.6rem 0.85rem; flex-wrap:wrap; gap:0.5rem;">
-          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-            <span class="badge badge-primary" id="sale-batch-count-badge" style="font-size:0.8rem; padding:0.3rem 0.6rem;">Batch: 1 Invoice</span>
-            <div id="sale-batch-tabs" style="display:flex; gap:0.35rem; flex-wrap:wrap;">
-              <!-- Dynamic tabs for each uploaded invoice -->
-            </div>
-          </div>
-          <div style="display:flex; gap:0.5rem; margin-left:auto;">
-            <button type="button" class="btn btn-sm btn-success" id="sale-commit-all-btn" onclick="app.commitAllBatchSales()">
-              <i class="fa-solid fa-check-double"></i> Commit All Batch Invoices
+          <div style="margin: 1rem 0; border-top: 1px solid var(--border-color); padding-top: 1rem; display:flex; flex-direction:column; gap:0.5rem;">
+            <button type="button" class="btn btn-warning btn-sm" onclick="app.applyCutoff7NovData()" style="width:100%; font-weight:700;">
+              <i class="fa-solid fa-rotate"></i> Reset to 7-Nov-2026 Cutoff Starting Stock
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="app.seedDatabase()" style="width:100%;">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Re-seed Sandbox Ingredients
+            </button>
+            <button type="button" class="btn btn-danger-sm btn-sm" onclick="app.resetLocalStorage()" style="width:100%; text-align:center;">
+              <i class="fa-solid fa-trash-can"></i> WIPE LOCAL STORAGE
             </button>
           </div>
         </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-settings')">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="width:auto;">Save Config</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
+  <!-- B. PURCHASE BILL EXTRACTED ITEMS REVIEW MODAL -->
+  <div class="modal-overlay" id="modal-verify-inward">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Review Inward Purchase Bill</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-verify-inward')">&times;</button>
+      </div>
+      <div class="modal-body">
         <div class="form-row">
           <div class="form-group">
-            <label>Invoice / Reference No *</label>
-            <input type="text" class="form-control" id="verify-sale-invoice" onchange="app.updateActiveInvoiceHeader('invoice_no', this.value)">
+            <label>Invoice Number *</label>
+            <input type="text" class="form-control" id="vi-invoice">
           </div>
           <div class="form-group">
-            <label>Sales Date *</label>
-            <input type="date" class="form-control" id="verify-sale-date" onchange="app.updateActiveInvoiceHeader('date', this.value)">
+            <label>Inward Date *</label>
+            <input type="date" class="form-control" id="vi-date">
           </div>
-          <div class="form-group">
-            <label>Buyer / Customer Name</label>
-            <input type="text" class="form-control" id="verify-sale-customer" placeholder="e.g. Krishna Enterprises" onchange="app.updateActiveInvoiceHeader('customer', this.value)">
+        </div>
+        <div class="form-group" style="margin-bottom:0.4rem;">
+          <label style="font-size:0.75rem;"><i class="fa-solid fa-link"></i> Auto-Match / Link Pending PO Group (Optional)</label>
+          <select class="form-control" id="vi-linked-order" onchange="app.applyOrderGroupToVerifyModal(this.value)" style="font-size:0.8rem; padding:0.35rem 0.5rem;">
+            <!-- Dynamically populated with PO groups -->
+          </select>
+        </div>
+
+        <!-- Photo/Image preview thumbnail if available -->
+        <div id="vi-image-preview-container" style="display:none; margin: 0.4rem 0; text-align: center; background: rgba(0,0,0,0.25); padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+            <span style="font-size:0.7rem; color:var(--text-muted);"><i class="fa-solid fa-camera"></i> Captured Invoice Photo</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="app.toggleInvoicePhotoPreview()" style="font-size:0.65rem; padding:0.12rem 0.45rem;" id="vi-photo-toggle-btn">Collapse</button>
+          </div>
+          <div id="vi-image-wrapper">
+            <img id="vi-image-preview" src="" alt="Invoice Photo" style="max-height: 80px; max-width: 100%; border-radius: 4px; object-fit: contain; cursor: pointer;" onclick="window.open(this.src, '_blank')">
+            <div style="font-size:0.62rem; color:var(--text-dim); margin-top:0.15rem;">Tap image to open full size</div>
           </div>
         </div>
 
-        <div id="verify-sale-summary-strip" style="display:flex; justify-content:space-between; align-items:center; background:rgba(16,185,129,0.05); border:1px solid var(--border-light); border-radius:6px; padding:0.5rem 0.85rem; font-size:0.85rem; flex-wrap:wrap; gap:0.5rem;">
-          <div><i class="fa-solid fa-file-invoice" style="color:var(--color-primary); margin-right:0.35rem;"></i> Extracted Invoice Total: <strong class="text-success" id="verify-sale-total-amount">Rs. 0.00</strong></div>
-          <label style="margin:0; font-size:0.8rem; display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
-            <input type="checkbox" id="verify-sale-record-ledger" checked>
-            <span>Also record in Monthly Ledger as <strong>Sale Receipt (Sales Revenue)</strong></span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.6rem; margin-bottom:0.35rem;">
+          <label style="font-size:0.75rem; font-weight:700; color:var(--text-color); margin:0;">
+            <i class="fa-solid fa-boxes-stacked"></i> Received Materials (Bill Lines)
           </label>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.addVerifyInwardRow()" style="font-size:0.72rem; padding:0.25rem 0.55rem; border:1px solid rgba(16, 185, 129, 0.4); color:var(--color-primary); background:rgba(16, 185, 129, 0.08); font-weight:600;">
+            <i class="fa-solid fa-plus"></i> Add Material Line
+          </button>
         </div>
 
-        <div class="split-30-70" style="gap:1rem;">
-          <!-- Left: Verification items -->
-          <div style="border: 1px solid var(--border-light); border-radius:6px; background: rgba(0,0,0,0.1); display:flex; flex-direction:column;">
-            <div style="padding:0.6rem; font-size:0.75rem; text-transform:uppercase; font-weight:bold; color:var(--text-dim); border-bottom:1px solid var(--border-light);">Dispatched Products</div>
-            <div class="table-container" style="max-height: 250px; overflow-y:auto; flex-grow:1;">
-              <table class="custom-table" style="font-size:0.8rem;">
-                <thead>
-                  <tr>
-                    <th>Product *</th>
-                    <th>Qty *</th>
-                    <th>Rate *</th>
-                    <th>Disc.</th>
-                    <th>Total</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="verify-sale-table-body">
-                  <!-- Dynamic rows -->
-                </tbody>
-              </table>
-            </div>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="app.addVerifySaleRow()" style="margin: 0.5rem; justify-content:center;">
-              <i class="fa-solid fa-plus"></i> Add Item
-            </button>
-          </div>
-
-          <!-- Right: Finished Goods Warehouse stock coverage checklist -->
-          <div style="border: 1px solid var(--border-light); border-radius:6px; padding: 1rem; display:flex; flex-direction:column; background:rgba(0,0,0,0.15);">
-            <h3 style="font-size:0.85rem; text-transform:uppercase; font-weight:bold; color:var(--text-muted); margin-bottom:0.75rem;">Finished Goods Stock Cover Validation</h3>
-            
-            <div id="sale-stock-warning-container">
-              <!-- Warnings if FG shortage occurs -->
-            </div>
-
-            <div style="flex-grow:1; display:flex; flex-direction:column; gap:0.5rem; max-height:220px; overflow-y:auto;" id="deduction-forecast-list">
-              <!-- Dynamically populated list -->
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
-        <button class="btn btn-danger btn-sm" onclick="app.discardActiveSaleInvoice()">
-          <i class="fa-solid fa-trash-can"></i> Discard This Invoice
-        </button>
-        <div style="display:flex; gap:0.75rem;">
-          <button class="btn btn-secondary" onclick="app.closeModal('sale-verify-modal')">Close</button>
-          <button class="btn btn-primary" id="confirm-sale-btn" onclick="app.postVerifySale()">Confirm & Dispatch Order</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- F. ADD NEW EMPLOYEE MODAL -->
-  <div class="modal-overlay" id="employee-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="employee-modal-title">Add New Employee Profile</h2>
-        <button class="modal-close" onclick="app.closeModal('employee-modal')">&times;</button>
-      </div>
-      <form id="employee-form" onsubmit="event.preventDefault(); app.saveEmployee();">
-        <input type="hidden" id="employee-form-id">
-        <div class="modal-body">
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label>Employee Name *</label>
-              <input type="text" class="form-control" id="employee-name" placeholder="Full Name" required>
-            </div>
-            <div class="form-group">
-              <label>Designation / Job Title *</label>
-              <input type="text" class="form-control" id="employee-title" placeholder="e.g. Processing Supervisor" required>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Joining Date *</label>
-              <input type="date" class="form-control" id="employee-joined" required>
-            </div>
-            <div class="form-group">
-              <label>Monthly Salary Amount (Rs.) *</label>
-              <input type="number" min="0" step="1" class="form-control" id="employee-salary" required placeholder="e.g. 25000">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Bank Account Number & Bank Name *</label>
-            <input type="text" class="form-control" id="employee-bank-account" placeholder="e.g. SBI A/C 9834012431" required>
-          </div>
-
-          <div class="form-group">
-            <label>IFSC Code / Branch details *</label>
-            <input type="text" class="form-control" id="employee-bank-ifsc" placeholder="e.g. SBIN0002013" required style="text-transform:uppercase;">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" onclick="app.closeModal('employee-modal')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Employee Profile</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- G. RAW MATERIAL DETAILED ENTRIES & STOCK LEDGER MODAL -->
-  <div class="modal-overlay" id="modal-material-ledger">
-    <div class="modal-content" style="max-width: 1050px; width: 95%;">
-      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <h2 id="ledger-material-title" style="margin:0; font-size:1.15rem;"><i class="fa-solid fa-list-check" style="color:var(--color-primary);"></i> Material Stock Ledger & Detailed Entries</h2>
-          <div id="ledger-material-subtitle" class="td-muted" style="font-size:0.8rem; margin-top:0.2rem;">Detailed historical trail of opening stock, inwards, production deductions, and adjustments</div>
-        </div>
-        <button class="modal-close" onclick="app.closeModal('modal-material-ledger')">&times;</button>
-      </div>
-
-      <div class="modal-body" style="display:flex; flex-direction:column; gap:1rem; max-height: 80vh; overflow-y:auto;">
-        <!-- Summary KPI strip -->
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem;">
-          <div style="background: rgba(255,255,255,0.03); border:1px solid var(--border-light); border-radius:6px; padding:0.75rem;">
-            <div class="td-muted font-sm">Current In-Stock Balance</div>
-            <div id="ledger-kpi-stock" style="font-size:1.25rem; font-weight:700; color:var(--color-primary);">0.000</div>
-          </div>
-          <div style="background: rgba(255,255,255,0.03); border:1px solid var(--border-light); border-radius:6px; padding:0.75rem;">
-            <div class="td-muted font-sm">Weighted Avg Purchase Rate</div>
-            <div id="ledger-kpi-rate" style="font-size:1.25rem; font-weight:700;">Rs. 0.00</div>
-          </div>
-          <div style="background: rgba(255,255,255,0.03); border:1px solid var(--border-light); border-radius:6px; padding:0.75rem;">
-            <div class="td-muted font-sm">Total Inwarded (Lifetime)</div>
-            <div id="ledger-kpi-inward" style="font-size:1.25rem; font-weight:700; color:var(--color-success);">0.000</div>
-          </div>
-          <div style="background: rgba(255,255,255,0.03); border:1px solid var(--border-light); border-radius:6px; padding:0.75rem;">
-            <div class="td-muted font-sm">Total Production Consumed</div>
-            <div id="ledger-kpi-consumed" style="font-size:1.25rem; font-weight:700; color:var(--color-warning);">0.000</div>
-          </div>
-        </div>
-
-        <!-- Ledger Entries Table -->
-        <div class="table-container" style="max-height: 420px; overflow-y:auto; border:1px solid var(--border-light); border-radius:6px;">
-          <table class="custom-table" style="font-size:0.85rem;">
+        <div class="table-container" style="max-height:250px; overflow:auto; border:1px solid var(--border-color); border-radius:6px; margin-bottom:0.25rem; background:rgba(0,0,0,0.15);">
+          <table class="verify-table" style="margin-top:0;">
             <thead>
               <tr>
-                <th style="min-width:95px;">Date</th>
-                <th style="min-width:110px;">Entry Type</th>
-                <th style="min-width:100px;">Ref / Doc No</th>
-                <th style="min-width:160px;">Description / Notes</th>
-                <th style="min-width:85px; text-align:right;">Inward (+)</th>
-                <th style="min-width:85px; text-align:right;">Outward (-)</th>
-                <th style="min-width:85px; text-align:right;">Rate (Rs.)</th>
-                <th style="min-width:95px; text-align:right;">Running Bal</th>
-                <th style="min-width:85px; text-align:center;">Action</th>
+                <th style="min-width:130px;">Material / SKU *</th>
+                <th style="min-width:145px;">Link to Pending Order</th>
+                <th style="width:65px;">Qty *</th>
+                <th style="width:70px;">Rate (Rs.) *</th>
+                <th style="min-width:90px;">Supplier</th>
+                <th style="width:35px;"></th>
               </tr>
             </thead>
-            <tbody id="material-ledger-table-body">
-              <!-- Dynamically populated -->
+            <tbody id="verify-inward-rows">
+              <!-- Dynamically loaded -->
             </tbody>
           </table>
         </div>
       </div>
-
-      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
-        <div class="td-muted font-sm" style="display:flex; align-items:center; gap:0.4rem;">
-          <i class="fa-solid fa-circle-info"></i>
-          <span>Editing or deleting an entry automatically recalculates stock balance and weighted moving average rate.</span>
-        </div>
-        <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-material-ledger')">Close</button>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-verify-inward')">Cancel</button>
+        <button class="btn btn-primary" onclick="app.commitVerifyInward()" style="width:auto;">Save Inward & Verify</button>
       </div>
     </div>
   </div>
 
-  <!-- H. EDIT INDIVIDUAL LEDGER ENTRY MODAL -->
-  <div class="modal-overlay" id="modal-edit-ledger-entry">
-    <div class="modal-content" style="max-width: 520px;">
+  <!-- D. SELECT MULTIPLE PENDING ORDERS MODAL -->
+  <div class="modal-overlay" id="modal-select-pending-orders">
+    <div class="modal-content" style="max-height: 90vh; display:flex; flex-direction:column; max-width: 440px;">
       <div class="modal-header">
-        <h2 id="edit-entry-modal-title"><i class="fa-solid fa-pen-to-square" style="color:var(--color-primary);"></i> Edit Ledger Entry</h2>
-        <button class="modal-close" onclick="app.closeModal('modal-edit-ledger-entry')">&times;</button>
+        <h2><i class="fa-solid fa-list-check" style="color:var(--color-primary);"></i> Link Pending Orders to Inward</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-select-pending-orders')">&times;</button>
       </div>
-      <form id="form-edit-ledger-entry" onsubmit="app.saveEditedLedgerEntry(event)">
-        <input type="hidden" id="edit-entry-tx-id">
-        <input type="hidden" id="edit-entry-mat-id">
-        <input type="hidden" id="edit-entry-direction">
+      <div class="modal-body" style="overflow-y:auto; padding: 0.75rem;">
+        <div class="alert-strip" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); color: var(--color-primary); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.75rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>Select multiple pending orders from the same vendor to inward all items in one go.</span>
+        </div>
+        <div id="pending-orders-select-container" style="display:flex; flex-direction:column; gap:0.6rem;">
+          <!-- Dynamically populated checklist grouped by PO/Vendor -->
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-select-pending-orders')">Cancel</button>
+        <button type="button" id="btn-commit-selected-orders" class="btn btn-primary" onclick="app.commitSelectedOrdersToInward()" style="width:auto;">
+          <i class="fa-solid fa-arrow-down"></i> Load Selected into Inward (0)
+        </button>
+      </div>
+    </div>
+  </div>
 
-        <div class="modal-body" style="display:flex; flex-direction:column; gap:0.85rem;">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Entry Date *</label>
-              <input type="date" class="form-control" id="edit-entry-date" required>
-            </div>
-            <div class="form-group">
-              <label>Reference Doc / Bill / Batch *</label>
-              <input type="text" class="form-control" id="edit-entry-ref" placeholder="e.g. INV-8829" required>
-            </div>
-          </div>
+  <!-- C. SALES INVOICE EXTRACTED DISPATCH REVIEW MODAL -->
+  <div class="modal-overlay" id="modal-verify-outward">
+    <div class="modal-content" style="max-height: 92vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h2 id="vo-modal-title">Review Outward Sales Dispatch</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-verify-outward')">&times;</button>
+      </div>
 
+      <!-- Batch Navigation Bar (visible when multiple PDFs uploaded) -->
+      <div id="vo-batch-nav" style="display:none; padding: 0.5rem 0.8rem; background: rgba(56,189,248,0.08); border-bottom: 1px solid var(--border-color); flex-direction: column; gap: 0.4rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span id="vo-batch-badge" style="font-size:0.75rem; font-weight:700; color:var(--info);"><i class="fa-solid fa-layer-group"></i> Batch Mode</span>
+          <button type="button" id="vo-commit-all-btn" class="btn btn-primary btn-sm" onclick="app.commitAllBatchOutward()" style="padding:0.25rem 0.6rem; font-size:0.75rem;">
+            <i class="fa-solid fa-check-double"></i> Commit All Invoices
+          </button>
+        </div>
+        <div id="vo-batch-tabs" style="display:flex; gap:0.35rem; overflow-x:auto; padding-bottom:0.2rem;">
+          <!-- Invoices tabs dynamically inserted -->
+        </div>
+      </div>
+
+      <div class="modal-body" style="overflow-y: auto;">
+        <div class="form-row">
           <div class="form-group">
-            <label>Description / Notes / Supplier</label>
-            <input type="text" class="form-control" id="edit-entry-desc" placeholder="Details about this entry">
+            <label>Sales Invoice Number *</label>
+            <input type="text" class="form-control" id="vo-invoice" onchange="app.updateActiveBatchOutwardHeader('invoice_no', this.value)">
           </div>
+          <div class="form-group">
+            <label>Dispatch Date *</label>
+            <input type="date" class="form-control" id="vo-date" onchange="app.updateActiveBatchOutwardHeader('date', this.value)">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Customer / Buyer Name *</label>
+          <input type="text" class="form-control" id="vo-customer" onchange="app.updateActiveBatchOutwardHeader('customer', this.value)">
+        </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label id="edit-entry-qty-label">Quantity (<span id="edit-entry-unit">kg</span>) *</label>
-              <input type="number" step="0.001" min="0.001" class="form-control" id="edit-entry-qty" required>
-            </div>
-            <div class="form-group" id="edit-entry-rate-group">
-              <label>Billed Rate per Unit (Rs.)</label>
-              <input type="number" step="0.01" min="0" class="form-control" id="edit-entry-rate">
-            </div>
+        <!-- Photo/Image preview thumbnail if available -->
+        <div id="vo-image-preview-container" style="display:none; margin: 0.4rem 0; text-align: center; background: rgba(0,0,0,0.25); padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+            <span style="font-size:0.7rem; color:var(--text-muted);"><i class="fa-solid fa-camera"></i> Captured Invoice Photo</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="app.toggleOutwardPhotoPreview()" style="font-size:0.65rem; padding:0.12rem 0.45rem;" id="vo-photo-toggle-btn">Collapse</button>
+          </div>
+          <div id="vo-image-wrapper">
+            <img id="vo-image-preview" src="" alt="Invoice Photo" style="max-height: 85px; max-width: 100%; border-radius: 4px; object-fit: contain; cursor: pointer;" onclick="window.open(this.src, '_blank')">
+            <div style="font-size:0.62rem; color:var(--text-dim); margin-top:0.15rem;">Tap image to view full size</div>
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-edit-ledger-entry')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Changes & Recalculate</button>
+        <div id="vo-summary-strip" style="display:flex; justify-content:space-between; align-items:center; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 6px; padding: 0.45rem 0.75rem; margin-bottom: 0.5rem; font-size: 0.8rem;">
+          <span id="vo-net-amount" style="font-weight:700; color:var(--success);"><i class="fa-solid fa-receipt"></i> Net Amount: Rs. 0.00</span>
+          <span id="vo-item-count" style="color:var(--text-muted); font-size:0.75rem;">0 items</span>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+          <span style="font-size:0.78rem; font-weight:600; color:var(--text-muted);"><i class="fa-solid fa-boxes-packing"></i> Products Dispatched</span>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.addVerifyOutwardRow()" style="padding:0.22rem 0.55rem; font-size:0.72rem;">
+            <i class="fa-solid fa-plus"></i> Add Line
+          </button>
+        </div>
+
+        <div class="table-container" style="margin-top:0.15rem; max-height:240px; border:1px solid var(--border-color); border-radius:6px; overflow-x:auto;">
+          <table class="verify-table">
+            <thead>
+              <tr>
+                <th style="min-width:130px;">Finished Good SKU *</th>
+                <th style="width:60px;">Qty *</th>
+                <th style="width:70px;">Rate (Rs.)</th>
+                <th style="width:55px;">Disc.</th>
+                <th style="width:70px;">Total</th>
+                <th style="width:35px; text-align:center;">Del</th>
+              </tr>
+            </thead>
+            <tbody id="verify-outward-rows">
+              <!-- Dynamically loaded -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <div>
+          <button type="button" id="vo-discard-btn" class="btn btn-danger-sm btn-sm" onclick="app.discardActiveOutwardBatch()" style="display:none; font-size:0.75rem;">
+            <i class="fa-solid fa-trash-can"></i> Discard Invoice
+          </button>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-verify-outward')">Close</button>
+          <button type="button" class="btn btn-primary" onclick="app.commitVerifyOutward()" style="width:auto;">Confirm & Dispatch</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- E. QUICK ADD RAW MATERIAL MODAL -->
+  <div class="modal-overlay" id="modal-add-raw-material">
+    <div class="modal-content" style="max-height: 92vh; max-width: 440px; display:flex; flex-direction:column;">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-box-open" style="color:var(--color-primary);"></i> Add New Raw Material</h2>
+        <button class="modal-close" onclick="app.closeModal('modal-add-raw-material')">&times;</button>
+      </div>
+      <form id="form-add-raw-material" onsubmit="app.handleQuickAddMaterial(event)" style="display:flex; flex-direction:column; flex-grow:1; overflow:hidden;">
+        <div class="modal-body" style="overflow-y:auto; padding:0.85rem; flex-grow:1;">
+          <div class="alert-strip" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); color: var(--color-primary); padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.72rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Adds the item immediately to your catalog and syncs to Supabase Cloud.</span>
+          </div>
+
+          <div class="form-group" style="margin-bottom:0.6rem;">
+            <label style="font-size:0.75rem;">Material / Item Name *</label>
+            <input type="text" class="form-control" id="q-mat-name" placeholder="e.g. Gloss Green Caps 28mm" required autofocus>
+          </div>
+
+          <div class="form-row" style="margin-bottom:0.6rem;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:0.75rem;">Item Code (Optional)</label>
+              <input type="text" class="form-control" id="q-mat-code" placeholder="Auto-generated if blank">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:0.75rem;">Unit of Measure *</label>
+              <select class="form-control" id="q-mat-unit" required>
+                <option value="Pieces" selected>Pieces (pcs)</option>
+                <option value="kg">Kilograms (kg)</option>
+                <option value="grams">Grams (g)</option>
+                <option value="Ltr">Liters (Ltr)</option>
+                <option value="Roll">Rolls</option>
+                <option value="Boxes">Boxes</option>
+                <option value="Sets">Sets</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom:0.6rem;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:0.75rem;">Target Rate (Rs.)</label>
+              <input type="number" step="0.01" min="0" class="form-control" id="q-mat-price" placeholder="0.00">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:0.75rem;">Min Stock Alert</label>
+              <input type="number" step="1" min="0" class="form-control" id="q-mat-min-stock" placeholder="10">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.75rem;">Description / Specs (Optional)</label>
+            <input type="text" class="form-control" id="q-mat-desc" placeholder="e.g. 28mm flip-top neck finish">
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-add-raw-material')">Cancel</button>
+          <button type="submit" id="btn-save-new-mat" class="btn btn-primary" style="width:auto;">
+            <i class="fa-solid fa-check"></i> Save & Use Material
+          </button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL: EXPORT TO EXCEL / CSV WITH VARIABLE DATE & PRODUCT FILTERS -->
+  <!-- F. SIGNED DEBIT NOTE SLIP MODAL -->
+  <div class="modal-overlay" id="modal-debit-note-slip">
+    <div class="modal-content slip-modal-container">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-file-circle-minus" style="color:var(--color-danger);"></i> Official Signed Debit Note</h2>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-dn-download-pdf" onclick="app.downloadActiveDebitSlipPdf()" style="padding:0.3rem 0.65rem; font-size:0.75rem; display:flex; align-items:center; gap:0.3rem; background:var(--color-primary); border-color:transparent;">
+            <i class="fa-solid fa-file-pdf"></i> Download Signed PDF
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.printDebitSlip()" style="padding:0.3rem 0.65rem; font-size:0.75rem;">
+            <i class="fa-solid fa-print"></i> Print
+          </button>
+          <button class="modal-close" onclick="app.closeModal('modal-debit-note-slip')">&times;</button>
+        </div>
+      </div>
+      <div class="slip-modal-body" id="debit-note-slip-body">
+        <!-- Rendered Signed Debit Note Sheet Container -->
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.72rem; color:var(--text-muted);"><i class="fa-solid fa-shield-halved"></i> Signed by Morella Farmpro Designated Partner</span>
+        <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-debit-note-slip')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- G. EXPORT TO EXCEL / CSV MODAL (MOBILE) -->
   <div class="modal-overlay" id="modal-export-excel">
-    <div class="modal-content" style="max-width: 680px; width: 95vw;">
-      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <h2 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.15rem; color: #10b981;">
-          <i class="fa-solid fa-file-excel"></i> Export Data to Excel / CSV
+    <div class="modal-content" style="max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
+      <div class="modal-header" style="padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 1rem; margin: 0; color: #10b981; display: flex; align-items: center; gap: 0.4rem;">
+          <i class="fa-solid fa-file-excel"></i> Export Data to Excel
         </h2>
         <button class="modal-close" onclick="app.closeModal('modal-export-excel')">&times;</button>
       </div>
 
-      <div class="modal-body" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
-        <!-- Banner -->
-        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 0.65rem 0.85rem; font-size: 0.82rem; color: var(--text-main);">
+      <div class="modal-body" style="padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.85rem;">
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.75rem; color: var(--text-main);">
           <strong style="color: #10b981;"><i class="fa-solid fa-circle-info"></i> Variable Range Export:</strong>
-          Select module, date range, product/material, and party filters. Files export with formulas and totals ready for Excel.
+          Select module, date range, product, and party filters. Spreadsheets export directly with calculated summaries.
         </div>
 
         <!-- 1. Module Selector -->
-        <div class="form-group">
-          <label style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Select Module / Tab *</label>
-          <select class="form-control" id="export-module-select" onchange="app.onExportModuleChange(this.value)" style="font-weight: 600;">
-            <option value="raw_materials">📦 Raw Materials (Inventory & Stock Valuation)</option>
-            <option value="production">🏭 Production (Batch Runs & BOM Consumption)</option>
-            <option value="finished_goods">✨ Finished Goods (Stock, Pricing & Valuation)</option>
-            <option value="purchase_inwards">📥 Purchase PDF (Inward Receipts & Invoices)</option>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.78rem; font-weight: 600; margin-bottom: 0.25rem;">Select Module / Tab *</label>
+          <select class="form-control" id="export-module-select" onchange="app.onExportModuleChange(this.value)" style="font-size: 0.82rem; font-weight: 600;">
+            <option value="raw_materials">📦 Raw Materials (Inventory & Stock)</option>
+            <option value="production">🏭 Production (Manufacturing Batches)</option>
+            <option value="finished_goods">✨ Finished Goods (Stock & Valuation)</option>
+            <option value="purchase_inwards">📥 Purchase PDF (Inward Receipts)</option>
             <option value="sales_outwards">📤 Sales Invoice (Dispatches & Samples)</option>
-            <option value="debit_notes">📄 Vendor Debit Notes (Defective Material Returns)</option>
+            <option value="debit_notes">📄 Vendor Debit Notes (Defective Items)</option>
           </select>
         </div>
 
         <!-- 2. Variable Date Range Section -->
-        <div id="export-date-range-container" style="border: 1px solid var(--border-light); border-radius: 6px; padding: 0.85rem; background: rgba(255, 255, 255, 0.02);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.4rem;">
-            <label style="font-weight: 600; font-size: 0.85rem; margin: 0;">
+        <div id="export-date-range-container" style="border: 1px solid var(--border-light); border-radius: 6px; padding: 0.75rem; background: rgba(255, 255, 255, 0.02);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.25rem;">
+            <label style="font-size: 0.78rem; font-weight: 600; margin: 0;">
               <i class="fa-solid fa-calendar-days" style="color: var(--color-primary);"></i> Date Range
             </label>
-            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('all')">All Time</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('this_month')">This Month</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('last_month')">Last Month</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('last_30')">Last 30 Days</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('fy_current')">FY 26-27</button>
+            <div style="display: flex; gap: 0.2rem; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('all')" style="padding: 0.15rem 0.4rem; font-size: 0.68rem;">All</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('this_month')" style="padding: 0.15rem 0.4rem; font-size: 0.68rem;">This Mo</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('last_month')" style="padding: 0.15rem 0.4rem; font-size: 0.68rem;">Last Mo</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('last_30')" style="padding: 0.15rem 0.4rem; font-size: 0.68rem;">30 Days</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.setExportDatePreset('fy_current')" style="padding: 0.15rem 0.4rem; font-size: 0.68rem;">FY 26-27</button>
             </div>
           </div>
 
-          <div class="form-row" style="display: flex; gap: 0.75rem;">
-            <div class="form-group" style="flex: 1;">
-              <label style="font-size: 0.78rem;">From Date</label>
-              <input type="date" class="form-control" id="export-date-from" onchange="app.updateExportPreviewCount()">
+          <div class="form-row" style="margin-bottom: 0;">
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+              <label style="font-size: 0.72rem;">From</label>
+              <input type="date" class="form-control" id="export-date-from" onchange="app.updateExportPreviewCount()" style="font-size: 0.78rem;">
             </div>
-            <div class="form-group" style="flex: 1;">
-              <label style="font-size: 0.78rem;">To Date</label>
-              <input type="date" class="form-control" id="export-date-to" onchange="app.updateExportPreviewCount()">
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+              <label style="font-size: 0.72rem;">To</label>
+              <input type="date" class="form-control" id="export-date-to" onchange="app.updateExportPreviewCount()" style="font-size: 0.78rem;">
             </div>
           </div>
-          <small class="td-muted" id="export-date-help" style="font-size: 0.75rem; display: block; margin-top: 0.3rem;">Leave dates empty to include all historical records.</small>
         </div>
 
-        <!-- 3. Product / Material Range Filter -->
-        <div class="form-row" style="display: flex; gap: 0.75rem;">
-          <div class="form-group" style="flex: 1;" id="export-product-filter-group">
-            <label id="export-product-filter-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Product / Material Range</label>
-            <select class="form-control" id="export-product-select" onchange="app.updateExportPreviewCount()">
-              <option value="all">All Products / Materials</option>
-            </select>
-          </div>
-
-          <div class="form-group" style="flex: 1;" id="export-secondary-filter-group">
-            <label id="export-secondary-filter-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Additional Filter</label>
-            <select class="form-control" id="export-secondary-select" onchange="app.updateExportPreviewCount()">
-              <option value="all">All Records</option>
-            </select>
-          </div>
+        <!-- 3. Product / Material Filter -->
+        <div class="form-group" id="export-product-filter-group" style="margin-bottom: 0;">
+          <label id="export-product-filter-label" style="font-size: 0.78rem; font-weight: 600; margin-bottom: 0.25rem;">Product / Material Range</label>
+          <select class="form-control" id="export-product-select" onchange="app.updateExportPreviewCount()" style="font-size: 0.8rem;">
+            <option value="all">All Products / Materials</option>
+          </select>
         </div>
 
-        <!-- 4. Party / Vendor / Customer Filter -->
-        <div class="form-group" id="export-party-group">
-          <label id="export-party-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Party Filter (Vendor / Customer / Supplier)</label>
-          <input type="text" class="form-control" id="export-party-search" placeholder="Type party name to filter or leave empty for all parties..." oninput="app.updateExportPreviewCount()">
+        <!-- 4. Secondary Filter -->
+        <div class="form-group" id="export-secondary-filter-group" style="margin-bottom: 0;">
+          <label id="export-secondary-filter-label" style="font-size: 0.78rem; font-weight: 600; margin-bottom: 0.25rem;">Filter Category / Status</label>
+          <select class="form-control" id="export-secondary-select" onchange="app.updateExportPreviewCount()" style="font-size: 0.8rem;">
+            <option value="all">All Records</option>
+          </select>
         </div>
 
-        <!-- 5. Live Matching Preview -->
-        <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-light); border-radius: 6px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center;">
-          <div style="font-size: 0.85rem; color: var(--text-main);">
-            <i class="fa-solid fa-filter" style="color: var(--color-primary); margin-right: 0.4rem;"></i>
-            <span>Matching records preview:</span>
-          </div>
-          <span id="export-preview-badge" style="font-size: 0.95rem; font-weight: 700; color: #10b981; background: rgba(16, 185, 129, 0.15); padding: 0.2rem 0.65rem; border-radius: 12px;">0 records</span>
+        <!-- 5. Party Filter -->
+        <div class="form-group" id="export-party-group" style="margin-bottom: 0;">
+          <label id="export-party-label" style="font-size: 0.78rem; font-weight: 600; margin-bottom: 0.25rem;">Party / Vendor / Customer Filter</label>
+          <input type="text" class="form-control" id="export-party-search" placeholder="Type party name or leave blank..." oninput="app.updateExportPreviewCount()" style="font-size: 0.8rem;">
+        </div>
+
+        <!-- Preview count -->
+        <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-light); border-radius: 6px; padding: 0.5rem 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            <i class="fa-solid fa-filter" style="color: var(--color-primary);"></i> Matching rows:
+          </span>
+          <span id="export-preview-badge" style="font-size: 0.82rem; font-weight: 700; color: #10b981; background: rgba(16, 185, 129, 0.15); padding: 0.15rem 0.5rem; border-radius: 10px;">0 records</span>
         </div>
       </div>
 
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem;">
-        <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-export-excel')">Cancel</button>
-        <div style="display: flex; gap: 0.5rem;">
-          <button type="button" class="btn btn-secondary" onclick="app.executeExport('csv')" style="display: flex; align-items: center; gap: 0.4rem;">
-            <i class="fa-solid fa-file-csv"></i> Download CSV
+      <div class="modal-footer" style="padding: 0.75rem 1rem; border-top: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="app.closeModal('modal-export-excel')" style="padding: 0.35rem 0.75rem; font-size: 0.78rem;">Close</button>
+        <div style="display: flex; gap: 0.35rem;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.executeExport('csv')" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.3rem;">
+            <i class="fa-solid fa-file-csv"></i> CSV
           </button>
-          <button type="button" class="btn btn-success" onclick="app.executeExport('xlsx')" style="background-color: #10b981; border-color: #10b981; color: white; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
-            <i class="fa-solid fa-file-excel"></i> Download Excel (.xlsx)
+          <button type="button" class="btn btn-success btn-sm" onclick="app.executeExport('xlsx')" style="background-color: #10b981; border-color: #10b981; color: white; padding: 0.35rem 0.75rem; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.3rem;">
+            <i class="fa-solid fa-file-excel"></i> Excel (.xlsx)
           </button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: CREATE / ISSUE DEBIT NOTE (DESKTOP) -->
-  <div class="modal-overlay" id="modal-create-debit-note">
-    <div class="modal-content" style="max-width: 840px; width: 95vw; max-height: 92vh; display: flex; flex-direction: column;">
-      <div class="modal-header">
-        <h2><i class="fa-solid fa-file-invoice-dollar" style="color:var(--color-danger);"></i> Issue Vendor Debit Note</h2>
-        <button class="modal-close" onclick="app.closeModal('modal-create-debit-note')">&times;</button>
-      </div>
-      <form id="form-create-debit-note" onsubmit="app.handleDesktopDebitSubmit(event)" style="display:flex; flex-direction:column; overflow:hidden; flex:1;">
-        <div class="modal-body" style="overflow-y:auto; padding:1.25rem; flex:1;">
-          <div style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); border-radius:6px; padding:0.6rem 0.85rem; margin-bottom:1rem; font-size:0.8rem; color:var(--text-main);">
-            <strong style="color:var(--color-danger);"><i class="fa-solid fa-triangle-exclamation"></i> Defective Material Rejection:</strong>
-            Issue an official signed debit note to a supplier for rejected, damaged, or defective goods. Stock will be automatically deducted from your inventory ledger upon confirmation.
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Debit Note No *</label>
-              <input type="text" class="form-control" id="dn-create-no" required placeholder="e.g. MFP-DN-26-001">
-            </div>
-            <div class="form-group">
-              <label>Debit Note Date *</label>
-              <input type="date" class="form-control" id="dn-create-date" required>
-            </div>
-            <div class="form-group">
-              <label>Original Invoice Ref / PO</label>
-              <input type="text" class="form-control" id="dn-create-invoice-ref" placeholder="e.g. INV-2026-89 or PO-044">
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group" style="flex:1.5;">
-              <label>Vendor / Supplier Name *</label>
-              <input type="text" class="form-control" id="dn-create-vendor" list="dn-create-vendor-datalist" required placeholder="Select or type vendor name" onchange="app.onDesktopDebitVendorChange(this.value)">
-              <datalist id="dn-create-vendor-datalist"></datalist>
-            </div>
-            <div class="form-group" style="flex:1;">
-              <label>Vendor GSTIN</label>
-              <input type="text" class="form-control" id="dn-create-gstin" placeholder="e.g. 24AABCM1234F1Z1" maxlength="15">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Vendor Registered Address</label>
-            <input type="text" class="form-control" id="dn-create-address" placeholder="Vendor factory or registered billing address">
-          </div>
-
-          <div class="form-group">
-            <label>Reason for Rejection / Return *</label>
-            <input type="text" class="form-control" id="dn-create-reason" required placeholder="e.g. Off-color, damaged seal, leaked containers, failed QC">
-          </div>
-
-          <!-- Multi-Item Defective Goods Builder -->
-          <div style="margin-top:1.25rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-              <label style="margin:0; font-weight:700; font-size:0.88rem; color:var(--color-danger);">
-                <i class="fa-solid fa-boxes-stacked"></i> Defective Items Returned *
-              </label>
-              <span id="dn-create-grand-total-badge" style="font-size:0.85rem; font-weight:700; color:var(--color-danger);">Total: Rs. 0.00</span>
-            </div>
-
-            <div id="dn-create-items-container" style="display:flex; flex-direction:column; gap:0.6rem;">
-              <!-- Dynamically populated rows -->
-            </div>
-
-            <button type="button" id="btn-add-desktop-defective-item" class="btn btn-secondary btn-sm" onclick="app.addDesktopDebitItemRow()" style="margin-top:0.5rem; width:100%; border:1px dashed var(--color-danger); color:var(--color-danger); background:rgba(239,68,68,0.06); padding:0.5rem; font-size:0.82rem; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:0.4rem; border-radius:6px;">
-              <i class="fa-solid fa-plus-circle"></i> Add Defective Material / Item
-            </button>
-          </div>
-
-          <!-- Deduct stock checkbox -->
-          <div style="margin-top:1rem; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); border-radius:6px; padding:0.6rem 0.85rem; display:flex; align-items:center; gap:0.6rem;">
-            <input type="checkbox" id="dn-create-deduct-stock" checked style="cursor:pointer; width:16px; height:16px;">
-            <label for="dn-create-deduct-stock" style="margin:0; font-size:0.8rem; font-weight:600; cursor:pointer;">
-              Deduct Defective Quantities from Raw Material Warehouse Stock
-            </label>
-          </div>
-
-          <div class="form-group" style="margin-top:1rem;">
-            <label>Internal Notes / Remarks (Optional)</label>
-            <textarea class="form-control" id="dn-create-notes" rows="2" placeholder="Inspection remarks, transporter info, GRN reference..."></textarea>
-          </div>
-        </div>
-
-        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
-          <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-create-debit-note')">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="btn-submit-create-dn">
-            <i class="fa-solid fa-check"></i> Issue & Generate Signed Debit Note
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL: OFFICIAL SIGNED DEBIT NOTE SLIP -->
-  <div class="modal-overlay" id="modal-desktop-debit-slip">
-    <div class="modal-content" style="max-width: 900px; width: 95vw; max-height: 94vh; display: flex; flex-direction: column;">
-      <div class="modal-header">
-        <h2><i class="fa-solid fa-file-circle-minus" style="color:var(--color-danger);"></i> Official Signed Debit Note</h2>
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-          <button type="button" class="btn btn-primary btn-sm" onclick="app.downloadDesktopDebitSlipPdf()" style="padding:0.35rem 0.75rem; font-size:0.8rem; display:flex; align-items:center; gap:0.3rem;">
-            <i class="fa-solid fa-file-pdf"></i> Download Signed PDF
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()" style="padding:0.35rem 0.75rem; font-size:0.8rem;">
-            <i class="fa-solid fa-print"></i> Print
-          </button>
-          <button class="modal-close" onclick="app.closeModal('modal-desktop-debit-slip')">&times;</button>
-        </div>
-      </div>
-      <div class="slip-modal-body" id="desktop-debit-slip-body" style="overflow-y: auto; overflow-x: auto; padding: 1.25rem; background: #cbd5e1; display: flex; justify-content: center; align-items: flex-start; flex: 1;">
-        <!-- Dynamically injected signed Debit Note Sheet -->
-      </div>
-      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-shield-halved"></i> Signed by Morella Farmpro Designated Partner</span>
-        <button type="button" class="btn btn-secondary" onclick="app.closeModal('modal-desktop-debit-slip')">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Scripts -->
-  <!-- Core script linking all views -->
-  <script src="app.js?v=3.0"></script>
+  <!-- Logic scripts -->
+  <script src="app.js?v=3.1"></script>
 </body>
 </html>
