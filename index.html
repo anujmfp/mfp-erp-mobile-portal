@@ -480,7 +480,7 @@
             <span><i class="fa-solid fa-gears"></i> Daily Production Batch</span>
           </div>
 
-          <form id="production-form" onsubmit="app.handleProductionSubmit(event)">
+          <form id="production-form" novalidate onsubmit="return false;">
             <div class="form-row">
               <div class="form-group">
                 <label>Production Date *</label>
@@ -527,7 +527,7 @@
               </div>
             </div>
 
-            <button type="submit" id="production-submit-btn" class="btn btn-primary" style="padding:0.65rem;">
+            <button type="button" id="production-submit-btn" class="btn btn-primary" onclick="app.handleProductionSubmit(event)" style="padding:0.65rem;">
               <i class="fa-solid fa-gears"></i> Record Daily Batch
             </button>
           </form>
@@ -544,6 +544,16 @@
             <button class="btn whatsapp-btn btn-sm" onclick="app.openWhatsApp('production-wa-text')">
               <i class="fa-brands fa-whatsapp"></i> Open WhatsApp
             </button>
+          </div>
+        </div>
+
+        <!-- Recent Production Batches History Card -->
+        <div class="ui-card" style="margin-top:0.75rem;">
+          <div class="card-title">
+            <span><i class="fa-solid fa-list-check"></i> Recent Production Batches</span>
+          </div>
+          <div id="production-history-list" style="max-height: 220px; overflow-y:auto; display:flex; flex-direction:column; gap:0.5rem;">
+            <div class="td-muted italic text-center" style="padding:0.75rem;">No production runs logged yet.</div>
           </div>
         </div>
 
@@ -1288,6 +1298,6 @@
   </div>
 
   <!-- Logic scripts -->
-  <script src="app.js?v=3.3"></script>
+  <script src="app.js?v=3.5"></script>
 </body>
 </html>

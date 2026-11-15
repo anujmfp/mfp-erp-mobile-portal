@@ -6,7 +6,7 @@
 
 const MFP_CUTOFF_DATA_7NOV = {
   cutoffDate: '2026-11-07',
-  version: '2026-11-07-v2',
+  version: '2026-11-07-v4',
 
   raw_materials: [
     // 1-14: Spices & Agricultural Raw Materials

@@ -73,7 +73,7 @@ class DBClient {
     }
 
     // Cutoff migration to 7-Nov-2026 dataset
-    const CUTOFF_VERSION = (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && MFP_CUTOFF_DATA_7NOV.version) ? MFP_CUTOFF_DATA_7NOV.version : '2026-11-07-v2';
+    const CUTOFF_VERSION = (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && MFP_CUTOFF_DATA_7NOV.version) ? MFP_CUTOFF_DATA_7NOV.version : '2026-11-07-v4';
     const currentVersion = localStorage.getItem('mfp_cutoff_version');
     if (currentVersion !== CUTOFF_VERSION && typeof MFP_CUTOFF_DATA_7NOV !== 'undefined') {
       console.log("Auto-applying 7-Nov-2026 Cutoff Starting Dataset & purging test/pre-cutoff operational records...");
@@ -127,7 +127,7 @@ class DBClient {
     }
 
     this.saveOfflineDb();
-    localStorage.setItem('mfp_cutoff_version', MFP_CUTOFF_DATA_7NOV.version || '2026-11-07-v2');
+    localStorage.setItem('mfp_cutoff_version', MFP_CUTOFF_DATA_7NOV.version || '2026-11-07-v4');
 
     // 3. Upsert clean schema-compatible records to cloud database if online
     if (this.config.isOnline && this.supabase) {
@@ -156,11 +156,11 @@ class DBClient {
           bom: p.bom || []
         }));
 
-        this.supabase.from('raw_materials').upsert(cleanRMs).then(({ error }) => {
+        this.supabase.from('raw_materials').upsert(cleanRMs, { onConflict: 'id' }).then(({ error }) => {
           if (error) console.error("Cloud cutoff sync error (raw_materials):", error);
           else console.log("✓ Cloud raw_materials successfully synced to 7-Nov cutoff balances!");
         });
-        this.supabase.from('products').upsert(cleanProds).then(({ error }) => {
+        this.supabase.from('products').upsert(cleanProds, { onConflict: 'id' }).then(({ error }) => {
           if (error) console.error("Cloud cutoff sync error (products):", error);
           else console.log("✓ Cloud products successfully synced to 7-Nov cutoff balances!");
         });
@@ -226,23 +226,28 @@ class DBClient {
         if (error) {
           console.error("Supabase error fetching raw materials:", error);
         } else if (data) {
-          if (data.length === 0 && !this.seedingInProgress) {
-            this.seedingInProgress = true;
-            console.log("Cloud raw_materials is empty. Auto-seeding cloud...");
-            await this.seedSandboxData();
-            this.seedingInProgress = false;
-            return [...this.offlineDb.raw_materials].sort((a, b) => a.name.localeCompare(b.name));
+          const mergedMap = new Map();
+          if (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && Array.isArray(MFP_CUTOFF_DATA_7NOV.raw_materials)) {
+            MFP_CUTOFF_DATA_7NOV.raw_materials.forEach(m => mergedMap.set(m.id, { ...m }));
           }
-          // Cache latest cloud raw materials into offline database
-          this.offlineDb.raw_materials = data;
+          data.forEach(m => {
+            const existing = mergedMap.get(m.id);
+            if (existing) {
+              mergedMap.set(m.id, { ...existing, ...m });
+            } else {
+              mergedMap.set(m.id, m);
+            }
+          });
+          const mergedList = Array.from(mergedMap.values());
+          this.offlineDb.raw_materials = mergedList;
           this.saveOfflineDb();
-          return data;
+          return mergedList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         }
       } catch (e) {
         console.error("Exception fetching raw materials:", e);
       }
     }
-    return [...this.offlineDb.raw_materials].sort((a, b) => a.name.localeCompare(b.name));
+    return [...this.offlineDb.raw_materials].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }
 
   async insertRawMaterial(material) {
@@ -300,23 +305,28 @@ class DBClient {
         if (error) {
           console.error("Supabase error fetching products:", error);
         } else if (data) {
-          if (data.length === 0 && !this.seedingInProgress) {
-            this.seedingInProgress = true;
-            console.log("Cloud products is empty. Auto-seeding cloud...");
-            await this.seedSandboxData();
-            this.seedingInProgress = false;
-            return [...this.offlineDb.products].sort((a, b) => a.name.localeCompare(b.name));
+          const mergedMap = new Map();
+          if (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && Array.isArray(MFP_CUTOFF_DATA_7NOV.products)) {
+            MFP_CUTOFF_DATA_7NOV.products.forEach(p => mergedMap.set(p.id, { ...p }));
           }
-          // Cache latest cloud products into offline database
-          this.offlineDb.products = data;
+          data.forEach(p => {
+            const existing = mergedMap.get(p.id);
+            if (existing) {
+              mergedMap.set(p.id, { ...existing, ...p });
+            } else {
+              mergedMap.set(p.id, p);
+            }
+          });
+          const mergedList = Array.from(mergedMap.values());
+          this.offlineDb.products = mergedList;
           this.saveOfflineDb();
-          return data;
+          return mergedList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         }
       } catch (e) {
         console.error("Exception fetching products:", e);
       }
     }
-    return [...this.offlineDb.products].sort((a, b) => a.name.localeCompare(b.name));
+    return [...this.offlineDb.products].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }
 
   async getOrders() {
@@ -429,8 +439,25 @@ class DBClient {
     return inward;
   }
 
+  async getProductions() {
+    if (this.config.isOnline && this.supabase) {
+      try {
+        const { data, error } = await this.supabase.from('productions').select('*').order('created_at', { ascending: false });
+        if (error) {
+          console.error("Supabase error fetching productions:", error);
+        } else if (data) {
+          return data;
+        }
+      } catch (e) {
+        console.error("Exception fetching productions:", e);
+      }
+    }
+    if (!this.offlineDb.productions) this.offlineDb.productions = [];
+    return [...this.offlineDb.productions].sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+  }
+
   async insertProduction(prod) {
-    prod.id = 'run_' + Date.now();
+    prod.id = 'run_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const dateStr = prod.date || new Date().toISOString().split('T')[0];
     prod.date = dateStr;
     prod.created_at = new Date(dateStr + 'T12:00:00Z').toISOString();
@@ -444,7 +471,7 @@ class DBClient {
       for (const recipe of targetProduct.bom) {
         const mat = rawMaterials.find(m => m.id === recipe.material_id);
         if (mat) {
-          const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage) / 100);
+          const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage || 0) / 100);
           const neededQty = parseFloat(recipe.quantity) * parseFloat(prod.quantity_produced) * wasteFactor;
           const newStock = Math.max(0, parseFloat(mat.current_stock || 0) - neededQty);
           await this.updateMaterialStock(mat.id, newStock, mat.average_price);
@@ -457,18 +484,23 @@ class DBClient {
     }
 
     if (this.config.isOnline && this.supabase) {
-      const payload = {
-        id: prod.id,
-        created_at: prod.created_at,
-        product_id: prod.product_id,
-        product_name: prod.product_name,
-        quantity_produced: prod.quantity_produced,
-        packaging_type: prod.packaging_type
-      };
-      const { error } = await this.supabase.from('productions').insert([payload]);
-      if (error) console.error("Error inserting production to Supabase:", error);
+      try {
+        const payload = {
+          id: prod.id,
+          created_at: prod.created_at,
+          product_id: prod.product_id,
+          product_name: prod.product_name,
+          quantity_produced: prod.quantity_produced,
+          packaging_type: prod.packaging_type
+        };
+        const { error } = await this.supabase.from('productions').insert([payload]);
+        if (error) console.error("Error inserting production to Supabase:", error);
+      } catch (e) {
+        console.error("Supabase insert production exception:", e);
+      }
     }
     
+    if (!this.offlineDb.productions) this.offlineDb.productions = [];
     this.offlineDb.productions.push(prod);
     this.saveOfflineDb();
     return prod;
@@ -3272,6 +3304,35 @@ class MFPMobilePortal {
       }
     }
 
+    // Render Recent Production Runs History
+    const historyList = document.getElementById('production-history-list');
+    if (historyList) {
+      const runs = await this.db.getProductions();
+      historyList.innerHTML = '';
+      if (!runs || runs.length === 0) {
+        historyList.innerHTML = '<div class="td-muted italic text-center" style="padding:0.75rem;">No production runs logged yet.</div>';
+      } else {
+        runs.slice(0, 15).forEach(run => {
+          const card = document.createElement('div');
+          card.className = 'stock-cover-item';
+          card.style.flexDirection = 'column';
+          card.style.alignItems = 'stretch';
+          card.style.gap = '0.25rem';
+          card.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:700; font-size:0.85rem; color:var(--color-primary);"><i class="fa-solid fa-industry"></i> ${run.product_name || 'Finished Good'}</span>
+              <span class="badge" style="background:rgba(16, 185, 129, 0.15); color:#10b981; font-size:0.7rem;">${run.date || (run.created_at || '').slice(0, 10)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.78rem;">
+              <span class="td-muted">${run.packaging_type || 'Pack'}${run.batch_ref ? ' • ' + run.batch_ref : ''}</span>
+              <span style="font-weight:700; color:var(--text-main); font-size:0.85rem;">+${run.quantity_produced} pcs</span>
+            </div>
+          `;
+          historyList.appendChild(card);
+        });
+      }
+    }
+
     await this.updateAggregatedRecipeChecklist();
   }
 
@@ -3291,7 +3352,7 @@ class MFPMobilePortal {
     // Group products by packaging category
     const categories = ['Bottles', 'Pouches', 'Sachets', 'Horeca'];
 
-    let optionsHtml = '<option value="" disabled selected>-- Select Product SKU --</option>';
+    let optionsHtml = `<option value="" disabled ${!item.product_id ? 'selected' : ''}>-- Select Product SKU --</option>`;
 
     categories.forEach(cat => {
       const catProds = products.filter(p => p.packaging_type === cat);
@@ -3324,14 +3385,14 @@ class MFPMobilePortal {
         <button type="button" class="multi-item-remove-btn" onclick="app.removeProductionSKURow(${index})" style="display:${showRemove ? 'inline-flex' : 'none'};"><i class="fa-solid fa-trash-can"></i> Remove</button>
       </div>
       <div class="form-group" style="margin-bottom:0.45rem;">
-        <select class="form-control prod-sku-select" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateProductionSKU(${index}, 'product_id', this.value)" required>
+        <select class="form-control prod-sku-select" style="font-size:0.8rem; padding:0.35rem 0.5rem;" onchange="app.updateProductionSKU(${index}, 'product_id', this.value)">
           ${optionsHtml}
         </select>
       </div>
       <div class="form-row" style="margin-bottom:0.25rem;">
         <div class="form-group" style="margin-bottom:0; flex:1;">
           <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.2rem;">Batch Qty (pcs) *</label>
-          <input type="number" step="1" min="1" class="form-control prod-qty-input" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.quantity || ''}" placeholder="Pieces" oninput="app.updateProductionSKU(${index}, 'quantity', this.value)" required>
+          <input type="number" step="1" min="1" class="form-control prod-qty-input" style="font-size:0.8rem; padding:0.35rem 0.5rem;" value="${item.quantity || ''}" placeholder="Pieces" oninput="app.updateProductionSKU(${index}, 'quantity', this.value)">
         </div>
       </div>
     `;
@@ -3568,104 +3629,119 @@ class MFPMobilePortal {
   }
 
   async handleProductionSubmit(e) {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
 
-    const prodDate = (document.getElementById('production-date') && document.getElementById('production-date').value) || this.getTodayDate();
-    const batchRef = (document.getElementById('production-batch-ref') ? document.getElementById('production-batch-ref').value.trim() : '');
+    try {
+      const dateInput = document.getElementById('production-date');
+      const prodDate = (dateInput && dateInput.value) ? dateInput.value : this.getTodayDate();
+      const batchRefInput = document.getElementById('production-batch-ref');
+      const batchRef = batchRefInput ? batchRefInput.value.trim() : '';
 
-    if (!this.productionItems || this.productionItems.length === 0) {
-      alert("Please add at least one Finished Good SKU to the production batch.");
-      return;
-    }
-
-    // Validate all items
-    for (let i = 0; i < this.productionItems.length; i++) {
-      const it = this.productionItems[i];
-      if (!it.product_id) {
-        alert(`Please select a Finished Good SKU for Item #${i + 1}.`);
+      if (!this.productionItems || this.productionItems.length === 0) {
+        alert("Please add at least one Finished Good SKU to the production batch.");
         return;
       }
-      if (!it.quantity || it.quantity <= 0) {
-        alert(`Please specify a valid batch quantity for Item #${i + 1}.`);
-        return;
+
+      // Validate all items
+      for (let i = 0; i < this.productionItems.length; i++) {
+        const it = this.productionItems[i];
+        if (!it.product_id) {
+          alert(`Please select a Finished Good SKU for Item #${i + 1}.`);
+          return;
+        }
+        const qtyNum = parseInt(it.quantity, 10);
+        if (isNaN(qtyNum) || qtyNum <= 0) {
+          alert(`Please specify a valid batch quantity (pcs) for Item #${i + 1}.`);
+          return;
+        }
+        it.quantity = qtyNum;
       }
-    }
 
-    const products = await this.db.getProducts();
-    const rawMaterials = await this.db.getRawMaterials();
+      const products = await this.db.getProducts();
+      const rawMaterials = await this.db.getRawMaterials();
 
-    // Check aggregated ingredient deficits
-    const aggregated = {};
-    this.productionItems.forEach(item => {
-      const prod = products.find(p => p.id === item.product_id);
-      if (!prod || !prod.bom) return;
-      const batchQty = parseFloat(item.quantity) || 0;
-      prod.bom.forEach(recipe => {
-        const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage || 0) / 100);
-        const needed = parseFloat(recipe.quantity) * batchQty * wasteFactor;
-        aggregated[recipe.material_id] = (aggregated[recipe.material_id] || 0) + needed;
-      });
-    });
-
-    let deficitStr = '';
-    Object.keys(aggregated).forEach(matId => {
-      const mat = rawMaterials.find(m => m.id === matId);
-      const name = mat ? mat.name : 'Unknown';
-      const available = mat ? parseFloat(mat.current_stock || 0) : 0;
-      const needed = aggregated[matId];
-      if (needed > available) {
-        deficitStr += `• Material "${name}": Warehouse has ${available.toFixed(3)}, but batch requires ${needed.toFixed(3)}.\n`;
-      }
-    });
-
-    if (deficitStr) {
-      const proceed = confirm(`Warning: Deficit detected in ingredients for this combined batch!\n\n${deficitStr}\nDo you wish to proceed and allow negative warehouse stock balance?`);
-      if (!proceed) return;
-    }
-
-    let itemsTextList = '';
-    let totalBatchPcs = 0;
-
-    // Commit each production run SKU
-    for (let i = 0; i < this.productionItems.length; i++) {
-      const it = this.productionItems[i];
-      const prod = products.find(p => p.id === it.product_id);
-      if (prod) {
-        totalBatchPcs += it.quantity;
-
-        await this.db.insertProduction({
-          date: prodDate,
-          batch_ref: batchRef || undefined,
-          product_id: prod.id,
-          product_name: prod.name,
-          quantity_produced: it.quantity,
-          packaging_type: prod.packaging_type
+      // Check aggregated ingredient deficits
+      const aggregated = {};
+      this.productionItems.forEach(item => {
+        const prod = products.find(p => p.id === item.product_id);
+        if (!prod || !prod.bom) return;
+        const batchQty = parseFloat(item.quantity) || 0;
+        prod.bom.forEach(recipe => {
+          const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage || 0) / 100);
+          const needed = parseFloat(recipe.quantity) * batchQty * wasteFactor;
+          aggregated[recipe.material_id] = (aggregated[recipe.material_id] || 0) + needed;
         });
+      });
 
-        itemsTextList += `${i + 1}. *${prod.name}* (${prod.code})\n` +
-                         `   • Output: *${it.quantity} pcs* (${prod.packaging_type})\n`;
+      let deficitStr = '';
+      Object.keys(aggregated).forEach(matId => {
+        const mat = rawMaterials.find(m => m.id === matId);
+        const name = mat ? mat.name : 'Unknown';
+        const available = mat ? parseFloat(mat.current_stock || 0) : 0;
+        const needed = aggregated[matId];
+        if (needed > available) {
+          deficitStr += `• Material "${name}": Warehouse has ${available.toFixed(3)}, but batch requires ${needed.toFixed(3)}.\n`;
+        }
+      });
+
+      if (deficitStr) {
+        const proceed = confirm(`Warning: Deficit detected in ingredients for this combined batch!\n\n${deficitStr}\nDo you wish to proceed and allow negative warehouse stock balance?`);
+        if (!proceed) return;
       }
+
+      let itemsTextList = '';
+      let totalBatchPcs = 0;
+
+      // Commit each production run SKU
+      for (let i = 0; i < this.productionItems.length; i++) {
+        const it = this.productionItems[i];
+        const prod = products.find(p => p.id === it.product_id);
+        if (prod) {
+          const qty = parseInt(it.quantity, 10) || 0;
+          totalBatchPcs += qty;
+
+          await this.db.insertProduction({
+            date: prodDate,
+            batch_ref: batchRef || undefined,
+            product_id: prod.id,
+            product_name: prod.name,
+            quantity_produced: qty,
+            packaging_type: prod.packaging_type
+          });
+
+          itemsTextList += `${i + 1}. *${prod.name}* (${prod.code})\n` +
+                           `   • Output: *${qty} pcs* (${prod.packaging_type})\n`;
+        }
+      }
+
+      // Compile WhatsApp Production Log
+      const waText = `🏭 *MFP ERP - Daily Production Run Log*\n` +
+                     `• *Date:* ${prodDate}\n` +
+                     (batchRef ? `• *Batch / Shift:* ${batchRef}\n` : '') +
+                     `• *Total Finished Goods Output:* ${totalBatchPcs} pcs across ${this.productionItems.length} SKUs\n\n` +
+                     `*Manufactured SKUs:*\n` +
+                     itemsTextList +
+                     `\n_Raw materials deducted based on BOM recipes & Finished Goods warehouse updated. Logged via MFP Mobile Console._`;
+
+      const waTextEl = document.getElementById('production-wa-text');
+      if (waTextEl) waTextEl.value = waText;
+      const waWidget = document.getElementById('production-wa-widget');
+      if (waWidget) waWidget.classList.remove('hidden');
+
+      const prevCount = this.productionItems.length;
+      const formEl = document.getElementById('production-form');
+      if (formEl) formEl.reset();
+
+      this.productionItems = [{ product_id: (products[0] ? products[0].id : ''), quantity: 50 }];
+      this.initDateInputs();
+
+      await this.renderProductionPane();
+      await this.refreshAllViews();
+      alert(`Success! Recorded daily batch of ${totalBatchPcs} pcs across ${prevCount} SKU(s) on ${prodDate}!\n\nRaw materials debited & Finished Goods warehouse credited.`);
+    } catch (err) {
+      console.error("Failed to record production batch:", err);
+      alert("Error recording production batch: " + (err.message || err));
     }
-
-    // Compile WhatsApp Production Log
-    const waText = `🏭 *MFP ERP - Daily Production Run Log*\n` +
-                   `• *Date:* ${prodDate}\n` +
-                   (batchRef ? `• *Batch / Shift:* ${batchRef}\n` : '') +
-                   `• *Total Finished Goods Output:* ${totalBatchPcs} pcs across ${this.productionItems.length} SKUs\n\n` +
-                   `*Manufactured SKUs:*\n` +
-                   itemsTextList +
-                   `\n_Raw materials deducted based on BOM recipes & Finished Goods warehouse updated. Logged via MFP Mobile Console._`;
-
-    document.getElementById('production-wa-text').value = waText;
-    document.getElementById('production-wa-widget').classList.remove('hidden');
-
-    const prevCount = this.productionItems.length;
-    document.getElementById('production-form').reset();
-    this.productionItems = [{ product_id: (products[0] ? products[0].id : ''), quantity: 50 }];
-    this.initDateInputs();
-
-    await this.refreshAllViews();
-    alert(`Success! Recorded daily batch of ${totalBatchPcs} pcs across ${prevCount} SKU(s) on ${prodDate}! Stocks updated & WhatsApp report compiled.`);
   }
 
 
