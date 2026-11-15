@@ -73,7 +73,7 @@ class DBClient {
     }
 
     // Cutoff migration to 7-Nov-2026 dataset
-    const CUTOFF_VERSION = (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && MFP_CUTOFF_DATA_7NOV.version) ? MFP_CUTOFF_DATA_7NOV.version : '2026-11-07-v4';
+    const CUTOFF_VERSION = (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && MFP_CUTOFF_DATA_7NOV.version) ? MFP_CUTOFF_DATA_7NOV.version : '2026-11-07-v5';
     const currentVersion = localStorage.getItem('mfp_cutoff_version');
     if (currentVersion !== CUTOFF_VERSION && typeof MFP_CUTOFF_DATA_7NOV !== 'undefined') {
       console.log("Auto-applying 7-Nov-2026 Cutoff Starting Dataset & purging test/pre-cutoff operational records...");
@@ -110,7 +110,9 @@ class DBClient {
       });
       this.offlineDb.productions = (this.offlineDb.productions || []).filter(p => {
         const d = (p.date || '').slice(0, 10);
-        return d && d >= cutoffDate;
+        if (d < cutoffDate) return false;
+        if (p.product_id === 'fg_btl_basil' || (p.product_name && p.product_name.includes('Basil Bottle'))) return false;
+        return true;
       });
       this.offlineDb.outwards = (this.offlineDb.outwards || []).filter(o => {
         const d = (o.dispatch_date || o.date || '').slice(0, 10);
@@ -127,7 +129,16 @@ class DBClient {
     }
 
     this.saveOfflineDb();
-    localStorage.setItem('mfp_cutoff_version', MFP_CUTOFF_DATA_7NOV.version || '2026-11-07-v4');
+    localStorage.setItem('mfp_cutoff_version', MFP_CUTOFF_DATA_7NOV.version || '2026-11-07-v5');
+
+    // Clean up any accidental Basil runs from cloud
+    if (this.config.isOnline && this.supabase) {
+      try {
+        this.supabase.from('productions').delete().eq('product_id', 'fg_btl_basil').then(() => {
+          console.log("✓ Purged accidental Basil Bottle production runs from Supabase cloud");
+        });
+      } catch (_) {}
+    }
 
     // 3. Upsert clean schema-compatible records to cloud database if online
     if (this.config.isOnline && this.supabase) {
@@ -3294,8 +3305,7 @@ class MFPMobilePortal {
     }
 
     if (!this.productionItems || this.productionItems.length === 0) {
-      const products = await this.db.getProducts();
-      this.productionItems = [{ product_id: (products[0] ? products[0].id : ''), quantity: 50 }];
+      this.productionItems = [{ product_id: '', quantity: '' }];
       await this.renderProductionItems();
     } else {
       const container = document.getElementById('production-items-container');
@@ -3312,12 +3322,12 @@ class MFPMobilePortal {
       if (!runs || runs.length === 0) {
         historyList.innerHTML = '<div class="td-muted italic text-center" style="padding:0.75rem;">No production runs logged yet.</div>';
       } else {
-        runs.slice(0, 15).forEach(run => {
+        runs.slice(0, 20).forEach(run => {
           const card = document.createElement('div');
           card.className = 'stock-cover-item';
           card.style.flexDirection = 'column';
           card.style.alignItems = 'stretch';
-          card.style.gap = '0.25rem';
+          card.style.gap = '0.35rem';
           card.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <span style="font-weight:700; font-size:0.85rem; color:var(--color-primary);"><i class="fa-solid fa-industry"></i> ${run.product_name || 'Finished Good'}</span>
@@ -3325,7 +3335,12 @@ class MFPMobilePortal {
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.78rem;">
               <span class="td-muted">${run.packaging_type || 'Pack'}${run.batch_ref ? ' • ' + run.batch_ref : ''}</span>
-              <span style="font-weight:700; color:var(--text-main); font-size:0.85rem;">+${run.quantity_produced} pcs</span>
+              <div style="display:flex; align-items:center; gap:0.4rem;">
+                <span style="font-weight:700; color:var(--text-main); font-size:0.85rem;">+${run.quantity_produced} pcs</span>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.deleteProduction('${run.id}')" title="Delete accidental batch" style="color:var(--color-danger); border:1px solid rgba(239, 68, 68, 0.4); background:rgba(239, 68, 68, 0.08); padding:0.15rem 0.45rem; font-size:0.72rem; border-radius:4px;">
+                  <i class="fa-solid fa-trash-can"></i> Delete
+                </button>
+              </div>
             </div>
           `;
           historyList.appendChild(card);
@@ -3452,14 +3467,9 @@ class MFPMobilePortal {
 
   async addProductionSKURow() {
     const products = await this.db.getProducts();
-    const filtered = this.currentProductionCategory === 'All' 
-      ? products 
-      : products.filter(p => p.packaging_type === this.currentProductionCategory);
-    const defaultProd = filtered[0] || products[0];
-
     const newItem = {
-      product_id: defaultProd ? defaultProd.id : '',
-      quantity: 50
+      product_id: '',
+      quantity: ''
     };
     this.productionItems.push(newItem);
 
@@ -3526,8 +3536,12 @@ class MFPMobilePortal {
     const container = document.getElementById('production-items-container');
     if (!container) return;
 
+    this._renderItemsReqId = (this._renderItemsReqId || 0) + 1;
+    const reqId = this._renderItemsReqId;
+
     // Fetch products first so container is NOT wiped before data is ready
     const products = await this.db.getProducts();
+    if (reqId !== this._renderItemsReqId) return; // Stale render request
 
     const fragment = document.createDocumentFragment();
     this.productionItems.forEach((item, index) => {
@@ -3548,9 +3562,13 @@ class MFPMobilePortal {
     const statusEl = document.getElementById('production-checklist-status');
     if (!list) return;
 
+    this._checklistReqId = (this._checklistReqId || 0) + 1;
+    const reqId = this._checklistReqId;
+
     // Fetch data first before touching DOM to avoid async duplication
     const products = await this.db.getProducts();
     const rawMaterials = await this.db.getRawMaterials();
+    if (reqId !== this._checklistReqId) return; // Stale checklist request
 
     const aggregated = {}; // material_id -> total needed
     let validSkusCount = 0;
@@ -3642,19 +3660,11 @@ class MFPMobilePortal {
         return;
       }
 
-      // Validate all items
-      for (let i = 0; i < this.productionItems.length; i++) {
-        const it = this.productionItems[i];
-        if (!it.product_id) {
-          alert(`Please select a Finished Good SKU for Item #${i + 1}.`);
-          return;
-        }
-        const qtyNum = parseInt(it.quantity, 10);
-        if (isNaN(qtyNum) || qtyNum <= 0) {
-          alert(`Please specify a valid batch quantity (pcs) for Item #${i + 1}.`);
-          return;
-        }
-        it.quantity = qtyNum;
+      // Filter and validate only filled rows
+      const validItems = this.productionItems.filter(it => it.product_id && parseInt(it.quantity, 10) > 0);
+      if (validItems.length === 0) {
+        alert("Please select a Finished Good SKU and specify a valid batch quantity (pcs).");
+        return;
       }
 
       const products = await this.db.getProducts();
@@ -3662,7 +3672,7 @@ class MFPMobilePortal {
 
       // Check aggregated ingredient deficits
       const aggregated = {};
-      this.productionItems.forEach(item => {
+      validItems.forEach(item => {
         const prod = products.find(p => p.id === item.product_id);
         if (!prod || !prod.bom) return;
         const batchQty = parseFloat(item.quantity) || 0;
@@ -3692,9 +3702,9 @@ class MFPMobilePortal {
       let itemsTextList = '';
       let totalBatchPcs = 0;
 
-      // Commit each production run SKU
-      for (let i = 0; i < this.productionItems.length; i++) {
-        const it = this.productionItems[i];
+      // Commit each valid production run SKU
+      for (let i = 0; i < validItems.length; i++) {
+        const it = validItems[i];
         const prod = products.find(p => p.id === it.product_id);
         if (prod) {
           const qty = parseInt(it.quantity, 10) || 0;
@@ -3718,7 +3728,7 @@ class MFPMobilePortal {
       const waText = `🏭 *MFP ERP - Daily Production Run Log*\n` +
                      `• *Date:* ${prodDate}\n` +
                      (batchRef ? `• *Batch / Shift:* ${batchRef}\n` : '') +
-                     `• *Total Finished Goods Output:* ${totalBatchPcs} pcs across ${this.productionItems.length} SKUs\n\n` +
+                     `• *Total Finished Goods Output:* ${totalBatchPcs} pcs across ${validItems.length} SKUs\n\n` +
                      `*Manufactured SKUs:*\n` +
                      itemsTextList +
                      `\n_Raw materials deducted based on BOM recipes & Finished Goods warehouse updated. Logged via MFP Mobile Console._`;
@@ -3728,11 +3738,11 @@ class MFPMobilePortal {
       const waWidget = document.getElementById('production-wa-widget');
       if (waWidget) waWidget.classList.remove('hidden');
 
-      const prevCount = this.productionItems.length;
+      const prevCount = validItems.length;
       const formEl = document.getElementById('production-form');
       if (formEl) formEl.reset();
 
-      this.productionItems = [{ product_id: (products[0] ? products[0].id : ''), quantity: 50 }];
+      this.productionItems = [{ product_id: '', quantity: '' }];
       this.initDateInputs();
 
       await this.renderProductionPane();
@@ -3741,6 +3751,68 @@ class MFPMobilePortal {
     } catch (err) {
       console.error("Failed to record production batch:", err);
       alert("Error recording production batch: " + (err.message || err));
+    }
+  }
+
+  async deleteProduction(id) {
+    if (!id) return;
+    const productions = await this.db.getProductions();
+    const run = productions.find(p => p.id === id);
+    if (!run) {
+      alert("Production run not found.");
+      return;
+    }
+
+    const confirmMsg = `Are you sure you want to delete this production batch?\n\n• Product: ${run.product_name}\n• Quantity: ${run.quantity_produced} pcs\n• Date: ${run.date || (run.created_at || '').slice(0, 10)}\n\nThis will reverse the batch: Finished Goods stock will decrease by ${run.quantity_produced} pcs, and raw materials will be credited back to the warehouse.`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const products = await this.db.getProducts();
+      const rawMaterials = await this.db.getRawMaterials();
+      const targetProduct = products.find(p => p.id === run.product_id);
+
+      if (targetProduct) {
+        // 1. Revert Finished Goods Stock
+        const currentFG = parseFloat(targetProduct.current_stock || 0);
+        const newFGStock = Math.max(0, currentFG - parseFloat(run.quantity_produced));
+        await this.db.updateProductStock(targetProduct.id, newFGStock);
+
+        // 2. Restore Raw Materials based on BOM
+        if (Array.isArray(targetProduct.bom)) {
+          for (const recipe of targetProduct.bom) {
+            const mat = rawMaterials.find(m => m.id === recipe.material_id);
+            if (mat) {
+              const wasteFactor = 1 + (parseFloat(recipe.wastage_percentage || 0) / 100);
+              const restoredQty = parseFloat(recipe.quantity) * parseFloat(run.quantity_produced) * wasteFactor;
+              const newRMStock = parseFloat(mat.current_stock || 0) + restoredQty;
+              await this.db.updateMaterialStock(mat.id, newRMStock, mat.average_price);
+            }
+          }
+        }
+      }
+
+      // 3. Delete from Supabase cloud if connected
+      if (this.db.config.isOnline && this.db.supabase) {
+        try {
+          const { error } = await this.db.supabase.from('productions').delete().eq('id', id);
+          if (error) console.error("Error deleting production from Supabase:", error);
+        } catch (e) {
+          console.error("Supabase delete production error:", e);
+        }
+      }
+
+      // 4. Delete from offline DB
+      if (this.db.offlineDb.productions) {
+        this.db.offlineDb.productions = this.db.offlineDb.productions.filter(p => p.id !== id);
+        this.db.saveOfflineDb();
+      }
+
+      await this.renderProductionPane();
+      await this.refreshAllViews();
+      alert(`✓ Successfully deleted batch of ${run.product_name} (${run.quantity_produced} pcs). Inventory stock reversed.`);
+    } catch (err) {
+      console.error("Error deleting production batch:", err);
+      alert("Failed to delete production batch: " + (err.message || err));
     }
   }
 

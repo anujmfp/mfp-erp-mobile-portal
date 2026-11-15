@@ -6,7 +6,7 @@
 
 const MFP_CUTOFF_DATA_7NOV = {
   cutoffDate: '2026-11-07',
-  version: '2026-11-07-v4',
+  version: '2026-11-07-v5',
 
   raw_materials: [
     // 1-14: Spices & Agricultural Raw Materials
@@ -466,7 +466,7 @@ const MFP_CUTOFF_DATA_7NOV = {
         { material_id: 'rm_rosemary', quantity: 0.010, wastage_percentage: 1.0 },
         { material_id: 'rm_black_pepper', quantity: 0.005, wastage_percentage: 0.5 },
         { material_id: 'pkg_btl_stk_herb', quantity: 1, wastage_percentage: 0 },
-        { material_id: 'pkg_cap_stk_herb', quantity: 1, wastage_percentage: 0 },
+        { material_id: 'pkg_cap_stk_mix_herb', quantity: 1, wastage_percentage: 0 },
         { material_id: 'pkg_caps_green', quantity: 1, wastage_percentage: 0 },
         { material_id: 'pkg_mat_wads', quantity: 1, wastage_percentage: 0 },
         { material_id: 'pkg_mat_shrink', quantity: 1, wastage_percentage: 0 }
