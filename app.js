@@ -211,21 +211,120 @@ class DBClient {
       this.config.isOnline = false;
     }
     
-    // Trigger UI badge updates
+    // Trigger UI badge updates & start live cross-device auto-sync
     this.updateStatusBadge();
+    this.startAutoSync();
   }
 
-  updateStatusBadge() {
+  updateStatusBadge(isRealtime = null) {
     const badge = document.getElementById('db-status-indicator');
     if (!badge) return;
 
-    if (this.config.isOnline) {
+    if (isRealtime !== null) this._isRealtimeLive = isRealtime;
+    const isLive = this.config.isOnline && this._isRealtimeLive;
+
+    if (isLive) {
       badge.className = 'db-status-badge online';
-      badge.innerHTML = `<i class="fa-solid fa-cloud"></i> Cloud Sync Active`;
+      badge.innerHTML = `<i class="fa-solid fa-cloud"></i> 🟢 Live Synced (Auto)`;
+    } else if (this.config.isOnline) {
+      badge.className = 'db-status-badge online';
+      badge.innerHTML = `<i class="fa-solid fa-cloud"></i> 🟢 Cloud Live`;
     } else {
       badge.className = 'db-status-badge offline';
-      badge.innerHTML = `<i class="fa-solid fa-cloud-slash"></i> Sandbox Mode`;
+      badge.innerHTML = `<i class="fa-solid fa-cloud-slash"></i> Offline Mode`;
     }
+  }
+
+  startAutoSync() {
+    if (this.autoSyncTimer) clearInterval(this.autoSyncTimer);
+    if (!this.config.isOnline || !this.supabase) return;
+
+    // Fast 8-second background poller to ensure cross-device consistency
+    this.autoSyncTimer = setInterval(async () => {
+      if (this.config.isOnline && this.supabase) {
+        await this.syncAllOfflineDataToCloud(false);
+        await this.refreshCloudDataSilently();
+      }
+    }, 8000);
+
+    // Auto-sync when phone screen unlocks, tab is focused, or network reconnects
+    if (!this._hasBoundEvents) {
+      this._hasBoundEvents = true;
+      window.addEventListener('focus', () => this.onAppActive());
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) this.onAppActive();
+      });
+      window.addEventListener('online', () => {
+        console.log("📶 Mobile connection online, flushing offline queue...");
+        this.onAppActive();
+      });
+    }
+
+    this.setupRealtimeSubscription();
+  }
+
+  async onAppActive() {
+    if (this.config.isOnline && this.supabase) {
+      await this.syncAllOfflineDataToCloud(false);
+      await this.refreshCloudDataSilently();
+    }
+  }
+
+  setupRealtimeSubscription() {
+    if (!this.config.isOnline || !this.supabase) return;
+
+    if (this.realtimeChannel) {
+      try { this.supabase.removeChannel(this.realtimeChannel); } catch (_) {}
+    }
+
+    try {
+      this.realtimeChannel = this.supabase.channel('mfp-erp-mobile-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public' }, async (payload) => {
+          console.log('⚡ Mobile Realtime Cloud Event:', payload.table, payload.eventType);
+          if (typeof app !== 'undefined' && app.showToast) {
+            let label = '';
+            if (payload.table === 'productions') {
+              const qty = payload.new ? (payload.new.quantity_produced || payload.new.quantity) : '';
+              const name = payload.new ? (payload.new.product_name || 'Product') : '';
+              label = `Production Run logged: ${name}${qty ? ' (+' + qty + ' pcs)' : ''}`;
+            } else if (payload.table === 'inwards') {
+              const name = payload.new ? (payload.new.material_name || 'Material') : '';
+              label = `Material Inward: ${name}`;
+            } else if (payload.table === 'outwards') {
+              const name = payload.new ? (payload.new.product_name || 'Product') : '';
+              label = `Dispatch: ${name}`;
+            } else if (payload.table === 'orders') {
+              const name = payload.new ? (payload.new.material_name || 'Material') : '';
+              label = `Purchase Order: ${name}`;
+            }
+            if (label) app.showToast(`⚡ Live Sync: ${label}`, 'success');
+          }
+
+          if (this._realtimePullTimeout) clearTimeout(this._realtimePullTimeout);
+          this._realtimePullTimeout = setTimeout(async () => {
+            await this.refreshCloudDataSilently();
+          }, 350);
+        })
+        .subscribe((status) => {
+          console.log('⚡ Mobile Realtime channel status:', status);
+          this.updateStatusBadge(status === 'SUBSCRIBED');
+        });
+    } catch (err) {
+      console.warn("Could not setup mobile Realtime WebSocket:", err);
+    }
+  }
+
+  async refreshCloudDataSilently() {
+    if (!this.config.isOnline || !this.supabase) return;
+    try {
+      await this.getRawMaterials();
+      await this.getProducts();
+      await this.getOrders();
+      await this.getProductions();
+      if (typeof app !== 'undefined' && app.refreshAllViews) {
+        await app.refreshAllViews();
+      }
+    } catch (_) {}
   }
 
   // --- DATABASE ACCESSIBILITY WRAPPERS ---
@@ -374,7 +473,7 @@ class DBClient {
         price_suggested: order.price_suggested,
         status: order.status
       };
-      const { error } = await this.supabase.from('orders').insert([payload]);
+      const { error } = await this.supabase.from('orders').upsert([payload], { onConflict: 'id' });
       if (error) console.error("Error inserting order to Supabase:", error);
     }
     
@@ -441,7 +540,7 @@ class DBClient {
         has_variance: inward.has_variance,
         variance_notes: inward.variance_notes
       };
-      const { error } = await this.supabase.from('inwards').insert([payload]);
+      const { error } = await this.supabase.from('inwards').upsert([payload], { onConflict: 'id' });
       if (error) console.error("Error inserting inward to Supabase:", error);
     }
     
@@ -450,21 +549,42 @@ class DBClient {
     return inward;
   }
 
+  async getInwards() {
+    const map = new Map();
+    (this.offlineDb.inwards || []).forEach(i => { if (i && i.id) map.set(i.id, i); });
+    if (this.config.isOnline && this.supabase) {
+      try {
+        const { data, error } = await this.supabase.from('inwards').select('*').order('created_at', { ascending: false });
+        if (data) data.forEach(i => { if (i && i.id) map.set(i.id, i); });
+      } catch (e) {
+        console.error("Exception fetching inwards:", e);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+  }
+
   async getProductions() {
+    const map = new Map();
+    if (!this.offlineDb.productions) this.offlineDb.productions = [];
+    this.offlineDb.productions.forEach(p => {
+      if (p && p.id) map.set(p.id, p);
+    });
+
     if (this.config.isOnline && this.supabase) {
       try {
         const { data, error } = await this.supabase.from('productions').select('*').order('created_at', { ascending: false });
         if (error) {
           console.error("Supabase error fetching productions:", error);
-        } else if (data) {
-          return data;
+        } else if (data && data.length > 0) {
+          data.forEach(p => {
+            if (p && p.id) map.set(p.id, p);
+          });
         }
       } catch (e) {
         console.error("Exception fetching productions:", e);
       }
     }
-    if (!this.offlineDb.productions) this.offlineDb.productions = [];
-    return [...this.offlineDb.productions].sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+    return Array.from(map.values()).sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
   }
 
   async insertProduction(prod) {
@@ -505,9 +625,15 @@ class DBClient {
           packaging_type: prod.packaging_type
         };
         const { error } = await this.supabase.from('productions').insert([payload]);
-        if (error) console.error("Error inserting production to Supabase:", error);
+        if (error) {
+          console.error("Error inserting production to Supabase:", error);
+          prod._syncError = error.message;
+        } else {
+          prod._synced = true;
+        }
       } catch (e) {
         console.error("Supabase insert production exception:", e);
+        prod._syncError = e.message;
       }
     }
     
@@ -515,6 +641,123 @@ class DBClient {
     this.offlineDb.productions.push(prod);
     this.saveOfflineDb();
     return prod;
+  }
+
+  async syncAllOfflineDataToCloud(isManual = false) {
+    if (!this.config.isOnline || !this.supabase) {
+      if (isManual) {
+        if (confirm("Supabase Cloud is currently offline on this phone.\n\nOpen Settings to connect your Supabase Project URL and Anon API Key?")) {
+          if (typeof app !== 'undefined' && app.openSettingsModal) app.openSettingsModal();
+        }
+      }
+      return { success: false, reason: 'offline' };
+    }
+
+    const results = {
+      productionsPushed: 0,
+      inwardsPushed: 0,
+      outwardsPushed: 0,
+      errors: []
+    };
+
+    // 1. Push Productions
+    for (const p of (this.offlineDb.productions || [])) {
+      try {
+        const payload = {
+          id: p.id,
+          created_at: p.created_at || new Date().toISOString(),
+          product_id: p.product_id,
+          product_name: p.product_name,
+          quantity_produced: parseFloat(p.quantity_produced || p.quantity) || 0,
+          packaging_type: p.packaging_type || 'Bottles'
+        };
+        const { error } = await this.supabase.from('productions').upsert([payload], { onConflict: 'id' });
+        if (error) {
+          results.errors.push(`Productions: ${error.message}`);
+        } else {
+          p._synced = true;
+          delete p._syncError;
+          results.productionsPushed++;
+        }
+      } catch (e) {
+        results.errors.push(`Productions: ${e.message}`);
+      }
+    }
+
+    // 2. Push Inwards
+    for (const inw of (this.offlineDb.inwards || [])) {
+      try {
+        const payload = {
+          id: inw.id,
+          created_at: inw.created_at || new Date().toISOString(),
+          invoice_no: inw.invoice_no || inw.bill_no || 'INW',
+          material_id: inw.material_id || null,
+          material_name: inw.material_name,
+          quantity_received: parseFloat(inw.quantity_received || inw.quantity) || 0,
+          rate_billed: parseFloat(inw.rate_billed || inw.rate) || 0,
+          supplier: inw.supplier || inw.vendor || 'Supplier'
+        };
+        const { error } = await this.supabase.from('inwards').upsert([payload], { onConflict: 'id' });
+        if (error) results.errors.push(`Inwards: ${error.message}`);
+        else results.inwardsPushed++;
+      } catch (e) {
+        results.errors.push(`Inwards: ${e.message}`);
+      }
+    }
+
+    // 3. Push Outwards
+    for (const otw of (this.offlineDb.outwards || [])) {
+      try {
+        const payload = {
+          id: otw.id,
+          created_at: otw.created_at || new Date().toISOString(),
+          invoice_no: otw.invoice_no || 'OTW',
+          product_id: otw.product_id || null,
+          product_name: otw.product_name,
+          quantity_dispatched: parseFloat(otw.quantity_dispatched || otw.quantity) || 0,
+          price_billed: parseFloat(otw.price_billed || otw.selling_price || 0),
+          customer: otw.customer || 'Customer'
+        };
+        const { error } = await this.supabase.from('outwards').upsert([payload], { onConflict: 'id' });
+        if (error) results.errors.push(`Outwards: ${error.message}`);
+        else results.outwardsPushed++;
+      } catch (e) {
+        results.errors.push(`Outwards: ${e.message}`);
+      }
+    }
+
+    // 4. Update Product & Raw Material stocks in Cloud
+    for (const prod of (this.offlineDb.products || [])) {
+      try {
+        await this.supabase.from('products').update({ current_stock: prod.current_stock }).eq('id', prod.id);
+      } catch (_) {}
+    }
+    for (const rm of (this.offlineDb.raw_materials || [])) {
+      try {
+        await this.supabase.from('raw_materials').update({ current_stock: rm.current_stock, average_price: rm.average_price }).eq('id', rm.id);
+      } catch (_) {}
+    }
+
+    this.saveOfflineDb();
+
+    if (isManual) {
+      if (results.errors.length > 0) {
+        alert(
+          `⚠️ Phone Cloud Sync Warning:\n\n` +
+          results.errors.slice(0, 3).map(e => `• ${e}`).join('\n') +
+          `\n\nNote: If you see Row Level Security (RLS) violation, run the SQL script in your Supabase SQL editor.`
+        );
+      } else {
+        alert(
+          `✓ Phone Data Uploaded to Supabase Cloud!\n\n` +
+          `• ${results.productionsPushed} Production Run(s) uploaded\n` +
+          `• ${results.inwardsPushed} Inward(s) uploaded\n` +
+          `• Finished Goods & Raw Materials stocks updated in Cloud.\n\n` +
+          `You can now click 'Sync' on your laptop to download these updates!`
+        );
+      }
+    }
+    return { success: results.errors.length === 0, ...results };
   }
 
   async insertOutward(outward) {
@@ -542,13 +785,27 @@ class DBClient {
         price_billed: outward.price_billed,
         customer: outward.customer
       };
-      const { error } = await this.supabase.from('outwards').insert([payload]);
+      const { error } = await this.supabase.from('outwards').upsert([payload], { onConflict: 'id' });
       if (error) console.error("Error inserting outward to Supabase:", error);
     }
     
     this.offlineDb.outwards.push(outward);
     this.saveOfflineDb();
     return outward;
+  }
+
+  async getOutwards() {
+    const map = new Map();
+    (this.offlineDb.outwards || []).forEach(o => { if (o && o.id) map.set(o.id, o); });
+    if (this.config.isOnline && this.supabase) {
+      try {
+        const { data, error } = await this.supabase.from('outwards').select('*').order('created_at', { ascending: false });
+        if (data) data.forEach(o => { if (o && o.id) map.set(o.id, o); });
+      } catch (e) {
+        console.error("Exception fetching outwards:", e);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
   }
 
   async getReturns() {
@@ -5178,28 +5435,85 @@ class MFPMobilePortal {
     }
   }
 
-  async refreshCloudData() {
+  async refreshCloudData(isManual = true) {
     const icon = document.getElementById('sync-icon');
     if (icon) icon.classList.add('fa-spin');
 
     if (!this.db.config.isOnline || !this.db.supabase) {
       if (icon) icon.classList.remove('fa-spin');
-      if (confirm("You are currently in Sandbox Mode (Offline). Would you like to connect your Supabase Cloud Database URL & Anon Key now?")) {
-        this.openSettingsModal();
+      if (isManual) {
+        if (confirm("You are currently in Sandbox Mode (Offline). Would you like to connect your Supabase Cloud Database URL & Anon Key now?")) {
+          this.openSettingsModal();
+        }
       }
       return;
     }
 
     try {
+      // 1. Push un-synced offline records first
+      const pushRes = await this.db.syncAllOfflineDataToCloud(false);
+
+      // 2. Fetch latest data from cloud
       const mats = await this.db.getRawMaterials();
       const prods = await this.db.getProducts();
       const orders = await this.db.getOrders();
+      const productions = await this.db.getProductions();
 
       await this.refreshAllViews();
-      alert(`✓ Cloud Sync Successful!\n• ${mats.length} Raw Materials synced\n• ${prods.length} Products synced\n• ${orders.length} Orders synced`);
+      if (isManual) {
+        alert(
+          `✓ Phone Cloud Sync Successful!\n\n` +
+          `• Cloud Upload: ${pushRes.productionsPushed || 0} production batch(es), ${pushRes.inwardsPushed || 0} inward(s)\n` +
+          `• Cloud Download: ${mats.length} Raw Materials, ${prods.length} Products, ${productions.length} Production runs\n\n` +
+          `Finished Goods stock and activity trail are live and synced with laptop.`
+        );
+      }
     } catch (err) {
       console.error("Cloud sync failed:", err);
-      alert("Cloud sync failed: " + err.message);
+      if (isManual) alert("Cloud sync failed: " + err.message);
+    } finally {
+      if (icon) icon.classList.remove('fa-spin');
+    }
+  }
+
+  showToast(msg, type = 'info') {
+    let container = document.getElementById('erp-toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'erp-toast-container';
+      container.style.cssText = 'position:fixed; top:0.75rem; left:50%; transform:translateX(-50%); z-index:99999; display:flex; flex-direction:column; gap:0.4rem; pointer-events:none; width:calc(100vw - 1.5rem); max-width:390px;';
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    const bg = type === 'success' ? '#064e3b' : (type === 'warning' ? '#78350f' : (type === 'danger' ? '#7f1d1d' : '#0f172a'));
+    const border = type === 'success' ? '#10b981' : (type === 'warning' ? '#f59e0b' : (type === 'danger' ? '#ef4444' : '#38bdf8'));
+    const icon = type === 'success' ? 'fa-circle-check' : (type === 'warning' ? 'fa-triangle-exclamation' : (type === 'danger' ? 'fa-circle-xmark' : 'fa-bolt'));
+
+    toast.style.cssText = `background:${bg}; border:1px solid ${border}; color:#fff; padding:0.55rem 0.85rem; border-radius:8px; font-size:0.78rem; font-weight:600; box-shadow:0 8px 20px rgba(0,0,0,0.55); display:flex; align-items:center; gap:0.5rem; pointer-events:auto; transition:all 0.3s cubic-bezier(0.16, 1, 0.3, 1); opacity:0; transform:translateY(-10px);`;
+    toast.innerHTML = `<i class="fa-solid ${icon}" style="color:${border}; font-size:0.95rem; flex-shrink:0;"></i><span style="flex:1; line-height:1.3;">${msg}</span>`;
+
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateY(0)';
+    });
+
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-10px)';
+      setTimeout(() => {
+        if (toast.parentElement) toast.parentElement.removeChild(toast);
+      }, 300);
+    }, 3500);
+  }
+
+  async pushPhoneDataToCloud() {
+    const icon = document.getElementById('sync-icon');
+    if (icon) icon.classList.add('fa-spin');
+    try {
+      await this.db.syncAllOfflineDataToCloud(true);
+      await this.refreshAllViews();
     } finally {
       if (icon) icon.classList.remove('fa-spin');
     }
@@ -5208,12 +5522,57 @@ class MFPMobilePortal {
   // --- SETTINGS CONFIGURATIONS ---
 
   openSettingsModal() {
+    this.loadSettingsForm();
     this.openModal('modal-settings');
   }
 
   loadSettingsForm() {
-    document.getElementById('set-sup-url').value = this.db.config.supabaseUrl || '';
-    document.getElementById('set-sup-key').value = this.db.config.supabaseKey || '';
+    const urlInput = document.getElementById('set-sup-url');
+    const keyInput = document.getElementById('set-sup-key');
+    if (urlInput) urlInput.value = this.db.config.supabaseUrl || '';
+    if (keyInput) keyInput.value = this.db.config.supabaseKey || '';
+
+    const offlineCountEl = document.getElementById('offline-records-count');
+    if (offlineCountEl) {
+      const prodCnt = (this.db.offlineDb.productions || []).length;
+      const inwCnt = (this.db.offlineDb.inwards || []).length;
+      offlineCountEl.textContent = `${prodCnt} production run(s), ${inwCnt} inward(s) stored locally on phone`;
+    }
+  }
+
+  copyCloudSetupLink() {
+    const url = (this.db.config && this.db.config.supabaseUrl) ? this.db.config.supabaseUrl.trim() : '';
+    const key = (this.db.config && this.db.config.supabaseKey) ? this.db.config.supabaseKey.trim() : '';
+
+    if (!url || !key) {
+      alert("No Supabase Cloud credentials found on this phone to share. Enter them in the form first.");
+      return;
+    }
+
+    const setupParams = `?url=${encodeURIComponent(url)}&key=${encodeURIComponent(key)}`;
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(setupParams).then(() => {
+        alert("✓ Copied Cloud Setup Parameters to clipboard!\n\nOpen your laptop browser at:\nfile:///C:/Users/anujd/.gemini/antigravity/scratch/mfp-erp-merged/index.html" + setupParams + "\n\nOr paste these parameters at the end of the laptop URL to connect automatically!");
+      }).catch(() => {
+        prompt("Copy this URL parameter string and open it on your laptop:", setupParams);
+      });
+    } else {
+      prompt("Copy this URL parameter string and open it on your laptop:", setupParams);
+    }
+  }
+
+  showCloudCredentials() {
+    const url = (this.db.config && this.db.config.supabaseUrl) ? this.db.config.supabaseUrl.trim() : '';
+    const key = (this.db.config && this.db.config.supabaseKey) ? this.db.config.supabaseKey.trim() : '';
+    
+    if (!url || !key) {
+      alert("No Supabase Cloud credentials currently saved on this phone.");
+      return;
+    }
+
+    prompt("Copy your Supabase Project URL:", url);
+    prompt("Copy your Supabase Anon API Key:", key);
   }
 
   saveSettings(e) {
