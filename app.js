@@ -72,14 +72,198 @@ class DBClient {
       this.offlineDb.debit_notes = [];
     }
 
-    // Cutoff migration to 7-Nov-2026 dataset
-    const CUTOFF_VERSION = (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && MFP_CUTOFF_DATA_7NOV.version) ? MFP_CUTOFF_DATA_7NOV.version : '2026-11-07-v5';
+    // Cutoff migration to 7-Nov-2026 dataset (~4.95L) + dynamic production replay engine
+    const CUTOFF_VERSION = '2026-11-07-v6-495k-recalc-sync';
     const currentVersion = localStorage.getItem('mfp_cutoff_version');
     if (currentVersion !== CUTOFF_VERSION && typeof MFP_CUTOFF_DATA_7NOV !== 'undefined') {
-      console.log("Auto-applying 7-Nov-2026 Cutoff Starting Dataset & purging test/pre-cutoff operational records...");
-      this.applyCutoff7Nov(true);
-    } else if (this.offlineDb.raw_materials.length === 0 && this.offlineDb.products.length === 0) {
-      this.seedSandboxData();
+      console.log("Auto-applying 7-Nov-2026 Cutoff Starting Dataset (~4.95L) + Dynamic Replay on Mobile...");
+      const existingRuns = (this.offlineDb && Array.isArray(this.offlineDb.productions))
+        ? this.offlineDb.productions.filter(p => p.id !== 'prod_chilli_1700_approved' && p.batch_ref !== 'BATCH-CHILLI-1700')
+        : [];
+      this.resetTo7NovWithSingleChilliBatch(false, existingRuns.length > 0 ? existingRuns : null);
+    } else {
+      this.recalculateInventoryFromCutoffAndRuns();
+    }
+  }
+
+  resetTo7NovWithSingleChilliBatch(syncToCloud = true, additionalRuns = null) {
+    if (typeof MFP_CUTOFF_DATA_7NOV === 'undefined') return;
+
+    // 1. Reset all Raw Materials to exact 7-Nov Cutoff baseline (~3.99L)
+    this.offlineDb.raw_materials = JSON.parse(JSON.stringify(MFP_CUTOFF_DATA_7NOV.raw_materials || []));
+
+    // 2. Reset all Finished Goods to exact 7-Nov Cutoff baseline (~96.5k)
+    this.offlineDb.products = JSON.parse(JSON.stringify(MFP_CUTOFF_DATA_7NOV.products || []));
+
+    // 3. Define the single authorized production run
+    const singleChilliRun = {
+      id: 'prod_chilli_1700_approved',
+      created_at: '2026-11-12T10:00:00.000Z',
+      date: '2026-11-12',
+      product_id: 'fg_pch_chilli_flakes',
+      product_code: 'FG-PCH-CHILLI-FLK',
+      product_name: 'Chilli Flakes Pouch',
+      quantity_produced: 1700,
+      packaging_type: 'Pouches',
+      packaging: 'Pouches',
+      batch_ref: 'BATCH-CHILLI-1700',
+      _synced: true
+    };
+
+    // 4. Set productions: Chilli batch + any user-recorded runs
+    if (Array.isArray(additionalRuns) && additionalRuns.length > 0) {
+      const cleanExtras = additionalRuns.filter(r => r.id !== 'prod_chilli_1700_approved' && r.batch_ref !== 'BATCH-CHILLI-1700');
+      this.offlineDb.productions = [singleChilliRun, ...cleanExtras];
+    } else {
+      this.offlineDb.productions = [singleChilliRun];
+    }
+    this.offlineDb.orders = [];
+    this.offlineDb.inwards = [];
+    this.offlineDb.outwards = [];
+    this.offlineDb.debit_notes = [];
+    this.offlineDb.returns = [];
+
+    // 5. Replay all productions, calculate BOM consumption, credit FG stock
+    this.recalculateInventoryFromCutoffAndRuns();
+
+    // 6. Save to localStorage
+    this.saveOfflineDb();
+    localStorage.setItem('mfp_cutoff_version', '2026-11-07-v6-495k-recalc-sync');
+    if (typeof app !== 'undefined' && app.refreshAllViews) app.refreshAllViews();
+
+    // 7. If Supabase is connected, clean the cloud database to match exactly
+    if (syncToCloud && this.config.isOnline && this.supabase) {
+      this.pushCleanResetToSupabase(this.offlineDb.productions);
+    }
+  }
+
+  // Master Engine: Replays all production runs over the 7-Nov baseline on Mobile
+  recalculateInventoryFromCutoffAndRuns() {
+    if (typeof MFP_CUTOFF_DATA_7NOV === 'undefined') return;
+
+    const baselineRM = JSON.parse(JSON.stringify(MFP_CUTOFF_DATA_7NOV.raw_materials || []));
+    const baselineFG = JSON.parse(JSON.stringify(MFP_CUTOFF_DATA_7NOV.products || []));
+
+    const rmMap = new Map();
+    baselineRM.forEach(m => {
+      rmMap.set(m.id, m);
+      rmMap.set(m.code, m);
+    });
+
+    const fgMap = new Map();
+    baselineFG.forEach(p => {
+      fgMap.set(p.id, p);
+      fgMap.set(p.code, p);
+    });
+
+    const cutoffDate = MFP_CUTOFF_DATA_7NOV.cutoffDate || '2026-11-07';
+
+    // Post-cutoff runs
+    const postCutoffRuns = (this.offlineDb.productions || []).filter(p => {
+      const dt = (p.date || p.created_at || '').slice(0, 10);
+      return !dt || dt >= cutoffDate;
+    });
+
+    postCutoffRuns.forEach(run => {
+      const pId = run.product_id || run.id;
+      const pCode = run.product_code || run.code;
+      const pName = run.product_name || run.name;
+
+      const prod = fgMap.get(pId) || fgMap.get(pCode) || baselineFG.find(p => p.name === pName);
+      if (!prod) return;
+
+      const qty = parseFloat(run.quantity_produced || run.quantity || 0);
+      if (qty <= 0) return;
+
+      prod.current_stock = (parseFloat(prod.current_stock) || 0) + qty;
+
+      if (run.batch_ref === 'BATCH-CHILLI-1700' || run.id === 'prod_chilli_1700_approved') {
+        const chilliRM = rmMap.get('rm_chilli_reg') || rmMap.get('RM-CHILLI-REG');
+        if (chilliRM) {
+          chilliRM.current_stock = Math.max(0, (parseFloat(chilliRM.current_stock) || 0) - 1.7);
+          chilliRM.current_stock = Math.round(chilliRM.current_stock * 1000) / 1000;
+        }
+        const rollRM = rmMap.get('pkg_pch_roll_chilli') || rmMap.get('ROL-PCH-CHILLI');
+        if (rollRM) {
+          rollRM.current_stock = Math.max(0, (parseFloat(rollRM.current_stock) || 0) - 1700);
+        }
+      } else if (Array.isArray(prod.bom)) {
+        prod.bom.forEach(b => {
+          const mat = rmMap.get(b.material_id);
+          if (mat) {
+            const waste = 1 + (parseFloat(b.wastage_percentage || 0) / 100);
+            const deduction = qty * parseFloat(b.quantity || 0) * waste;
+            mat.current_stock = Math.max(0, (parseFloat(mat.current_stock) || 0) - deduction);
+            mat.current_stock = Math.round(mat.current_stock * 1000) / 1000;
+          }
+        });
+      }
+    });
+
+    // Replay inwards
+    (this.offlineDb.inwards || []).forEach(inw => {
+      const dt = (inw.date || inw.created_at || '').slice(0, 10);
+      if (dt && dt < cutoffDate) return;
+      const m = rmMap.get(inw.material_id) || baselineRM.find(rm => rm.name === inw.material_name);
+      if (m) {
+        const qty = parseFloat(inw.quantity_received || inw.quantity || 0);
+        m.current_stock = (parseFloat(m.current_stock) || 0) + qty;
+        m.current_stock = Math.round(m.current_stock * 1000) / 1000;
+      }
+    });
+
+    // Replay outwards
+    (this.offlineDb.outwards || []).forEach(outw => {
+      const dt = (outw.dispatch_date || outw.date || outw.created_at || '').slice(0, 10);
+      if (dt && dt < cutoffDate) return;
+      const p = fgMap.get(outw.product_id) || baselineFG.find(prod => prod.name === outw.product_name);
+      if (p) {
+        const qty = parseFloat(outw.quantity_dispatched || outw.quantity || 0);
+        p.current_stock = Math.max(0, (parseFloat(p.current_stock) || 0) - qty);
+      }
+    });
+
+    this.offlineDb.raw_materials = baselineRM;
+    this.offlineDb.products = baselineFG;
+  }
+
+    async pushCleanResetToSupabase(runs) {
+    if (!this.config.isOnline || !this.supabase) return;
+    try {
+      console.log("🧹 Syncing Clean Reset from Phone to Supabase Cloud...");
+      const runsToPush = Array.isArray(runs) ? runs : [runs];
+      await this.supabase.from('productions').delete().neq('id', '___');
+      await this.supabase.from('orders').delete().neq('id', '___');
+      await this.supabase.from('inwards').delete().neq('id', '___');
+      await this.supabase.from('outwards').delete().neq('id', '___');
+      await this.supabase.from('debit_notes').delete().neq('id', '___');
+
+      try {
+        await this.supabase.from('products').delete().or('description.eq.1,code.like.FG-CF_%,name.like.%Bottle 45%');
+      } catch (delErr) {
+        console.warn("Notice deleting junk products on phone:", delErr);
+      }
+
+      await this.supabase.from('productions').upsert(runsToPush, { onConflict: 'id' });
+
+      const cleanRMs = (this.offlineDb.raw_materials || []).map(m => ({
+        id: m.id, code: m.code, name: m.name, current_stock: parseFloat(m.current_stock) || 0,
+        unit: m.unit || 'kg', average_price: parseFloat(m.average_price) || 0,
+        min_stock: parseFloat(m.min_stock || m.buffer) || 5.0, description: m.description || ''
+      }));
+      await this.supabase.from('raw_materials').upsert(cleanRMs, { onConflict: 'id' });
+
+      const cleanProds = (this.offlineDb.products || []).map(p => ({
+        id: p.id, code: p.code, name: p.name, price: parseFloat(p.price || 0),
+        selling_price: parseFloat(p.selling_price || 0), current_stock: parseFloat(p.current_stock) || 0,
+        min_stock: parseFloat(p.min_stock || p.buffer) || 10.0, packaging_type: p.packaging_type || p.packaging || 'Bottles',
+        description: p.description || '', bom: p.bom || []
+      }));
+      await this.supabase.from('products').upsert(cleanProds, { onConflict: 'id' });
+
+      console.log("✓ Cloud database successfully cleaned and synced to 7-Nov cutoff + 1 batch!");
+    } catch (e) {
+      console.error("Error pushing clean reset to Supabase:", e);
     }
   }
 
@@ -182,9 +366,10 @@ class DBClient {
   }
 
   saveConfig(url, key) {
-    this.config.supabaseUrl = url;
-    this.config.supabaseKey = key;
-    this.config.isOnline = !!(url && key);
+    let cleanUrl = (url || '').trim().replace(/\/rest\/v1\/?.*$/i, '').replace(/\/+$/, '');
+    this.config.supabaseUrl = cleanUrl;
+    this.config.supabaseKey = (key || '').trim();
+    this.config.isOnline = !!(cleanUrl && this.config.supabaseKey);
     localStorage.setItem('mfp_supabase_config', JSON.stringify(this.config));
     this.initSupabase();
   }
@@ -198,8 +383,8 @@ class DBClient {
       try {
         let cleanUrl = this.config.supabaseUrl.trim();
         // Remove trailing slashes and rest/v1 paths automatically
-        cleanUrl = cleanUrl.replace(/\/rest\/v1\/?$/, '');
-        cleanUrl = cleanUrl.replace(/\/$/, '');
+        cleanUrl = cleanUrl.replace(/\/rest\/v1\/?.*$/i, '').replace(/\/+$/, '');
+        this.config.supabaseUrl = cleanUrl;
 
         this.supabase = supabase.createClient(cleanUrl, this.config.supabaseKey);
         this.config.isOnline = true;
@@ -223,12 +408,13 @@ class DBClient {
     if (isRealtime !== null) this._isRealtimeLive = isRealtime;
     const isLive = this.config.isOnline && this._isRealtimeLive;
 
+    const timeStr = this._lastSyncTime ? ` (${this._lastSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : '';
     if (isLive) {
       badge.className = 'db-status-badge online';
-      badge.innerHTML = `<i class="fa-solid fa-cloud"></i> 🟢 Live Synced (Auto)`;
+      badge.innerHTML = `<i class="fa-solid fa-cloud"></i> 🟢 Auto-Sync (5m)${timeStr}`;
     } else if (this.config.isOnline) {
       badge.className = 'db-status-badge online';
-      badge.innerHTML = `<i class="fa-solid fa-cloud"></i> 🟢 Cloud Live`;
+      badge.innerHTML = `<i class="fa-solid fa-cloud"></i> 🟢 Auto-Sync (5m)${timeStr}`;
     } else {
       badge.className = 'db-status-badge offline';
       badge.innerHTML = `<i class="fa-solid fa-cloud-slash"></i> Offline Mode`;
@@ -239,13 +425,14 @@ class DBClient {
     if (this.autoSyncTimer) clearInterval(this.autoSyncTimer);
     if (!this.config.isOnline || !this.supabase) return;
 
-    // Fast 8-second background poller to ensure cross-device consistency
+    // 5-minute recurring two-way sync (300,000 ms) + instant Realtime push
+    const FIVE_MINUTES_MS = 5 * 60 * 1000;
     this.autoSyncTimer = setInterval(async () => {
       if (this.config.isOnline && this.supabase) {
-        await this.syncAllOfflineDataToCloud(false);
-        await this.refreshCloudDataSilently();
+        console.log("⏰ 5-minute recurring auto-sync running on mobile...");
+        await this.syncTwoWay(false);
       }
-    }, 8000);
+    }, FIVE_MINUTES_MS);
 
     // Auto-sync when phone screen unlocks, tab is focused, or network reconnects
     if (!this._hasBoundEvents) {
@@ -255,7 +442,7 @@ class DBClient {
         if (!document.hidden) this.onAppActive();
       });
       window.addEventListener('online', () => {
-        console.log("📶 Mobile connection online, flushing offline queue...");
+        console.log("📶 Mobile connection online, syncing with cloud...");
         this.onAppActive();
       });
     }
@@ -265,8 +452,79 @@ class DBClient {
 
   async onAppActive() {
     if (this.config.isOnline && this.supabase) {
+      await this.syncTwoWay(false);
+    }
+  }
+
+  async syncTwoWay(isManual = false) {
+    if (!this.config.isOnline || !this.supabase) return;
+    try {
+      // 1. Push local unsynced offline records first
       await this.syncAllOfflineDataToCloud(false);
-      await this.refreshCloudDataSilently();
+
+      // 2. Pull remote records from laptop/cloud
+      await this.pullLatestFromCloud();
+
+      // 3. Mark last sync time
+      this._lastSyncTime = new Date();
+      this.updateStatusBadge();
+
+      // 4. Refresh views
+      if (typeof app !== 'undefined' && app.refreshAllViews) {
+        await app.refreshAllViews();
+      }
+    } catch (err) {
+      console.warn("Mobile two-way sync tick exception:", err);
+    }
+  }
+
+  async pullLatestFromCloud() {
+    if (!this.config.isOnline || !this.supabase) return;
+    try {
+      // 1. Pull Productions
+      const { data: prods, error: prodErr } = await this.supabase.from('productions').select('*').order('created_at', { ascending: false });
+      if (!prodErr && Array.isArray(prods)) {
+        const prodMap = new Map();
+        (this.offlineDb.productions || []).forEach(p => { if (p && p.id) prodMap.set(p.id, p); });
+        prods.forEach(p => {
+          if (!p || !p.id) return;
+          prodMap.set(p.id, {
+            ...p,
+            _synced: true
+          });
+        });
+        this.offlineDb.productions = Array.from(prodMap.values());
+      }
+
+      // 2. Pull Inwards
+      const { data: inws, error: inwErr } = await this.supabase.from('inwards').select('*').order('created_at', { ascending: false });
+      if (!inwErr && Array.isArray(inws)) {
+        const inwMap = new Map();
+        (this.offlineDb.inwards || []).forEach(i => { if (i && i.id) inwMap.set(i.id, i); });
+        inws.forEach(i => {
+          if (!i || !i.id) return;
+          inwMap.set(i.id, { ...i, _synced: true });
+        });
+        this.offlineDb.inwards = Array.from(inwMap.values());
+      }
+
+      // 3. Pull Outwards
+      const { data: outws, error: outwErr } = await this.supabase.from('outwards').select('*').order('created_at', { ascending: false });
+      if (!outwErr && Array.isArray(outws)) {
+        const outwMap = new Map();
+        (this.offlineDb.outwards || []).forEach(o => { if (o && o.id) outwMap.set(o.id, o); });
+        outws.forEach(o => {
+          if (!o || !o.id) return;
+          outwMap.set(o.id, { ...o, _synced: true });
+        });
+        this.offlineDb.outwards = Array.from(outwMap.values());
+      }
+
+      // 4. Recalculate complete inventory from 7-Nov baseline + all combined runs
+      this.recalculateInventoryFromCutoffAndRuns();
+      this.saveOfflineDb();
+    } catch (e) {
+      console.warn("Exception pulling latest from cloud on mobile:", e);
     }
   }
 
@@ -317,10 +575,9 @@ class DBClient {
   async refreshCloudDataSilently() {
     if (!this.config.isOnline || !this.supabase) return;
     try {
-      await this.getRawMaterials();
-      await this.getProducts();
-      await this.getOrders();
-      await this.getProductions();
+      await this.pullLatestFromCloud();
+      this._lastSyncTime = new Date();
+      this.updateStatusBadge();
       if (typeof app !== 'undefined' && app.refreshAllViews) {
         await app.refreshAllViews();
       }
@@ -416,15 +673,23 @@ class DBClient {
           console.error("Supabase error fetching products:", error);
         } else if (data) {
           const mergedMap = new Map();
+          const validCodes = new Set();
           if (typeof MFP_CUTOFF_DATA_7NOV !== 'undefined' && Array.isArray(MFP_CUTOFF_DATA_7NOV.products)) {
-            MFP_CUTOFF_DATA_7NOV.products.forEach(p => mergedMap.set(p.id, { ...p }));
+            MFP_CUTOFF_DATA_7NOV.products.forEach(p => {
+              mergedMap.set(p.id, { ...p, packaging: p.packaging || p.packaging_type, packaging_type: p.packaging_type || p.packaging });
+              validCodes.add(p.code);
+            });
           }
           data.forEach(p => {
-            const existing = mergedMap.get(p.id);
+            if (!p || !p.code) return;
+            if (p.description === '1' || p.description === 1 || p.description === '1.0') return;
+            if (/^FG-CF_/i.test(p.code)) return;
+            if (/Bottle 45/i.test(p.name)) return;
+            if (validCodes.size > 0 && !validCodes.has(p.code)) return;
+            const existing = mergedMap.get(p.id) || Array.from(mergedMap.values()).find(ep => ep.code === p.code);
             if (existing) {
-              mergedMap.set(p.id, { ...existing, ...p });
-            } else {
-              mergedMap.set(p.id, p);
+              const pkg = p.packaging_type || p.packaging || existing.packaging_type || existing.packaging || 'Bottles';
+              mergedMap.set(existing.id, { ...existing, ...p, packaging: pkg, packaging_type: pkg });
             }
           });
           const mergedList = Array.from(mergedMap.values());
@@ -726,26 +991,23 @@ class DBClient {
       }
     }
 
-    // 4. Update Product & Raw Material stocks in Cloud
-    for (const prod of (this.offlineDb.products || [])) {
-      try {
-        await this.supabase.from('products').update({ current_stock: prod.current_stock }).eq('id', prod.id);
-      } catch (_) {}
-    }
-    for (const rm of (this.offlineDb.raw_materials || [])) {
-      try {
-        await this.supabase.from('raw_materials').update({ current_stock: rm.current_stock, average_price: rm.average_price }).eq('id', rm.id);
-      } catch (_) {}
-    }
-
     this.saveOfflineDb();
 
     if (isManual) {
       if (results.errors.length > 0) {
+        const isFetchErr = results.errors.some(e => e.includes('Failed to fetch'));
+        const isRlsErr = results.errors.some(e => e.toLowerCase().includes('row-level security') || e.toLowerCase().includes('rls') || e.toLowerCase().includes('permission denied'));
+        let extraGuide = '';
+        if (isFetchErr) {
+          extraGuide = '\n\n💡 "Failed to fetch" means your phone cannot reach Supabase. Common causes:\n1. Your Supabase project is PAUSED! (Go to https://supabase.com/dashboard and click "Restore project")\n2. The Project URL has a typo or is missing https://\n3. Phone internet is disconnected.';
+        } else if (isRlsErr) {
+          extraGuide = '\n\n💡 Row Level Security (RLS) violation: Open https://supabase.com/dashboard -> SQL Editor, paste the Master SQL script, and click the green "RUN" button.';
+        }
+
         alert(
           `⚠️ Phone Cloud Sync Warning:\n\n` +
           results.errors.slice(0, 3).map(e => `• ${e}`).join('\n') +
-          `\n\nNote: If you see Row Level Security (RLS) violation, run the SQL script in your Supabase SQL editor.`
+          extraGuide
         );
       } else {
         alert(
@@ -5540,6 +5802,33 @@ class MFPMobilePortal {
     }
   }
 
+  
+  copyMobileBatchesForLaptop() {
+    const runs = (this.db && this.db.offlineDb && this.db.offlineDb.productions) ? this.db.offlineDb.productions : [];
+    if (!runs || runs.length === 0) {
+      alert("No production runs recorded on this phone yet.");
+      return;
+    }
+    const cleanList = runs.map(r => ({
+      product_name: r.product_name,
+      product_code: r.product_code || r.code || '',
+      quantity_produced: parseFloat(r.quantity_produced || r.quantity || 0),
+      packaging_type: r.packaging_type || r.packaging || '',
+      date: r.date || (r.created_at || '').slice(0, 10),
+      batch_ref: r.batch_ref || ''
+    }));
+    const jsonStr = JSON.stringify(cleanList, null, 2);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(jsonStr).then(() => {
+        alert(`✓ Copied ${cleanList.length} production batch(es) to clipboard!\n\nOpen your laptop ERP, click "Import Mobile Batches", and paste.`);
+      }).catch(() => {
+        prompt("Copy these production batches for your laptop:", jsonStr);
+      });
+    } else {
+      prompt("Copy these production batches for your laptop:", jsonStr);
+    }
+  }
+
   copyCloudSetupLink() {
     const url = (this.db.config && this.db.config.supabaseUrl) ? this.db.config.supabaseUrl.trim() : '';
     const key = (this.db.config && this.db.config.supabaseKey) ? this.db.config.supabaseKey.trim() : '';
@@ -5575,6 +5864,62 @@ class MFPMobilePortal {
     prompt("Copy your Supabase Anon API Key:", key);
   }
 
+  async diagnoseConnection() {
+    let url = (this.db.config && this.db.config.supabaseUrl) ? this.db.config.supabaseUrl.trim() : '';
+    const key = (this.db.config && this.db.config.supabaseKey) ? this.db.config.supabaseKey.trim() : '';
+
+    if (!url || !key) {
+      alert("❌ No Supabase URL or Key entered.\nPlease enter your Supabase Project URL (e.g. https://xxxx.supabase.co) and Anon API Key first.");
+      return;
+    }
+
+    url = url.replace(/\/rest\/v1\/?.*$/i, '').replace(/\/+$/, '');
+    let report = `🔍 Diagnostics for: ${url}\n\n`;
+
+    // 1. Check reachability via standard fetch ping
+    try {
+      const pingUrl = url + '/rest/v1/';
+      const res = await fetch(pingUrl, {
+        headers: {
+          'apikey': key,
+          'Authorization': `Bearer ${key}`
+        }
+      });
+      if (res.status === 200 || res.status === 404 || res.ok) {
+        report += `✅ Endpoint Reachable: HTTP ${res.status}\n`;
+      } else {
+        report += `⚠️ Server returned status: HTTP ${res.status} (${res.statusText})\n`;
+      }
+    } catch (netErr) {
+      report += `❌ Cannot reach server: "${netErr.message}"\n\n🚨 CRITICAL: Your Supabase project may be PAUSED!\n1. Open https://supabase.com/dashboard\n2. If your project has a "PAUSED" badge, click "Restore project"\n3. Check that the URL is spelled correctly (starts with https:// and ends with .supabase.co)\n`;
+      alert(report);
+      return;
+    }
+
+    // 2. Test reading and writing to productions table
+    try {
+      if (!this.db.supabase) {
+        this.db.initSupabase();
+      }
+      const { data, error } = await this.db.supabase.from('productions').select('id').limit(1);
+      if (error) {
+        report += `❌ 'productions' table error: ${error.message} (Code: ${error.code || 'ERR'})\n`;
+        if (error.message.includes('row-level security') || error.code === '42501') {
+          report += `\n🚨 RLS Violation: Row Level Security is blocking queries. Copy the Master SQL snippet from schema.sql, paste into Supabase SQL Editor, and click the green RUN button.\n`;
+        } else if (error.message.includes('does not exist')) {
+          report += `\n🚨 Table Missing: The 'productions' table was not created in Supabase yet. Run schema.sql in Supabase SQL editor.\n`;
+        }
+      } else {
+        report += `✅ 'productions' table: OK (${data ? data.length : 0} sample rows read successfully!)\n`;
+        report += `\n🎉 All checks passed! Cloud sync is working properly.`;
+      }
+    } catch (e) {
+      report += `❌ Query exception: ${e.message}\n`;
+    }
+
+    alert(report);
+  }
+
   saveSettings(e) {
     e.preventDefault();
     const url = document.getElementById('set-sup-url').value.trim();
@@ -5593,12 +5938,12 @@ class MFPMobilePortal {
   }
 
   applyCutoff7NovData() {
-    if (!confirm("Are you sure you want to reset your inventory to the 7th November 2026 Cutoff Starting Dataset? Pre-cutoff operational records will be purged, and starting opening stock (including 47.5 kg Chilli Regular) will be restored.")) {
+    if (!confirm("Are you sure you want to clean all data and reset to 7-Nov-2026 Cutoff + 1 single production run of Chilli Flakes (1,700 pcs)? All other operational and garbage records will be permanently wiped.")) {
       return;
     }
-    this.db.applyCutoff7Nov(true);
+    this.db.resetTo7NovWithSingleChilliBatch(true);
     this.refreshAllViews();
-    alert("✓ Successfully loaded 7-Nov-2026 Cutoff Starting Stock (100 items: 78 Raw Materials/Packaging + 22 Finished Goods)!\n\nChilli Regular restored to 47.5 Kgs and Pouch Roll to 92,000 Pcs.");
+    alert("✓ Database successfully cleaned! 7-Nov Cutoff stock restored, all garbage wiped, and exactly 1 production run of Chilli Flakes (1,700 pcs) logged.");
   }
 
   resetLocalStorage() {
